@@ -4701,6 +4701,7 @@ MonoBehaviour:
   enableCsvLogging: 1
   csvFileName: ga_progress.csv
   overwriteCsvOnStart: 1
+  populationCsvFileName: ga_population.csv
 --- !u!4 &2044161436
 Transform:
   m_ObjectHideFlags: 0

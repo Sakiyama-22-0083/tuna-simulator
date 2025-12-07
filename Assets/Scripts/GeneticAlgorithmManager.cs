@@ -76,7 +76,7 @@ public class GeneticAlgorithmManager : MonoBehaviour
 
     [Header("評価待機設定")]
     [SerializeField, Tooltip("サーバーのスコア応答を待機する最大秒数。0以下で無制限に待つ。")]
-    private float serverScoreTimeoutSeconds = 180f;
+    private float serverScoreTimeoutSeconds = 1800f;
 
     [Header("サーバー接続設定")]
     [SerializeField, Tooltip("サーバーのヘルスチェック先 URL。HTTP 200 応答で接続完了とみなします。")]
@@ -148,6 +148,18 @@ public class GeneticAlgorithmManager : MonoBehaviour
     private string populationCsvFileName = "ga_population.csv";
     #endregion
 
+    #region CSV 復元設定
+    [Header("CSV 復元設定")]
+    [SerializeField, Tooltip("既存の population CSV から最新世代を読み込み、GA を継続するかどうか。")]
+    private bool resumeFromCsv = false;
+
+    [SerializeField, Tooltip("読み込みに使用する CSV ファイル名。空欄の場合は populationCsvFileName を利用します。")]
+    private string resumeCsvFileName = "";
+
+    [SerializeField, Tooltip("0 で最新世代から、正の値で指定した世代番号 (1-based) から再開します。")]
+    private int resumeGenerationNumber = 0;
+    #endregion
+
     #region Unity ライフサイクル
     private void Awake()
     {
@@ -168,8 +180,8 @@ public class GeneticAlgorithmManager : MonoBehaviour
         CacheAgentPrefabBounds();
         InitializeSimulationAgents();
         InitializePopulationGenes();
+    TryLoadPopulationFromCsv();
         InitializeCsvLogging();
-        WritePopulationParametersToCsv(currentGeneration, individuals);
 
         if (autoRun)
         {
@@ -739,20 +751,7 @@ public class GeneticAlgorithmManager : MonoBehaviour
 
     private float CalculateFallbackFitness()
     {
-        if (simulationAgents.Count == 0)
-        {
-            return 0f;
-        }
-
-        float total = 0f;
-        int count = 0;
-        foreach (var agent in simulationAgents)
-        {
-            if (agent == null) continue;
-            total += Mathf.Max(0f, agent.fitness);
-            count++;
-        }
-        return count > 0 ? total / count : 0f;
+        return 0f;
     }
 
     public void HandleServerScoreReceived(int episodeNumber, float score)
@@ -805,6 +804,7 @@ public class GeneticAlgorithmManager : MonoBehaviour
 
         CalculateStatistics();
         WriteGenerationCsvRow();
+    WritePopulationParametersToCsv(currentGeneration, individuals);
 
         if (enableDetailedLogging)
         {
@@ -826,11 +826,10 @@ public class GeneticAlgorithmManager : MonoBehaviour
             return;
         }
 
-        var nextPopulation = CreateNextGeneration();
-        individuals.Clear();
-        individuals.AddRange(nextPopulation);
-        currentGeneration++;
-        WritePopulationParametersToCsv(currentGeneration, individuals);
+    var nextPopulation = CreateNextGeneration();
+    individuals.Clear();
+    individuals.AddRange(nextPopulation);
+    currentGeneration++;
 
         if (autoRun)
         {
@@ -980,6 +979,143 @@ public class GeneticAlgorithmManager : MonoBehaviour
     }
     #endregion
 
+    #region CSV 復元
+    private bool TryLoadPopulationFromCsv()
+    {
+        if (!resumeFromCsv)
+        {
+            return false;
+        }
+
+        string fileName = string.IsNullOrWhiteSpace(resumeCsvFileName) ? populationCsvFileName : resumeCsvFileName.Trim();
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            Debug.LogWarning("[GA] Resume requested but CSV file name is empty.");
+            return false;
+        }
+
+        string logsDirectory = Path.Combine(Application.dataPath, "..", "Logs");
+        string fullPath = Path.GetFullPath(Path.Combine(logsDirectory, fileName));
+
+        if (!File.Exists(fullPath))
+        {
+            Debug.LogWarning($"[GA] Resume requested but CSV file not found: {fullPath}");
+            return false;
+        }
+
+        try
+        {
+            var generationRows = new Dictionary<int, List<(int index, float[] genes)>>();
+            using StreamReader reader = new StreamReader(fullPath, Encoding.UTF8);
+            bool headerSkipped = false;
+
+            while (!reader.EndOfStream)
+            {
+                string line = reader.ReadLine();
+                if (!headerSkipped)
+                {
+                    headerSkipped = true;
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                string[] columns = line.Split(',');
+                if (columns.Length < 2)
+                {
+                    continue;
+                }
+
+                if (!int.TryParse(columns[0].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int generationNumber))
+                {
+                    continue;
+                }
+
+                if (!int.TryParse(columns[1].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int individualNumber))
+                {
+                    continue;
+                }
+
+                float[] genes = new float[GeneticBoidAgent.GeneCount];
+                for (int geneIndex = 0; geneIndex < genes.Length; geneIndex++)
+                {
+                    int valueIndex = 2 + geneIndex;
+                    float parsedValue = 0f;
+
+                    if (valueIndex < columns.Length &&
+                        float.TryParse(columns[valueIndex].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out float parsed))
+                    {
+                        parsedValue = parsed;
+                    }
+
+                    genes[geneIndex] = GeneticBoidAgent.ClampGene(geneIndex, parsedValue);
+                }
+
+                if (!generationRows.TryGetValue(generationNumber, out var list))
+                {
+                    list = new List<(int, float[])>();
+                    generationRows[generationNumber] = list;
+                }
+
+                list.Add((individualNumber, genes));
+            }
+
+            if (generationRows.Count == 0)
+            {
+                Debug.LogWarning($"[GA] Resume requested but CSV '{fileName}' contains no population rows.");
+                return false;
+            }
+
+            int latestGeneration = generationRows.Keys.Max();
+            int targetGeneration = resumeGenerationNumber > 0 ? resumeGenerationNumber : latestGeneration;
+            if (!generationRows.TryGetValue(targetGeneration, out var targetRows))
+            {
+                Debug.LogWarning($"[GA] Requested generation {resumeGenerationNumber} not found in CSV. Falling back to latest generation {latestGeneration}.");
+                targetGeneration = latestGeneration;
+                targetRows = generationRows[targetGeneration];
+            }
+
+            var orderedRows = targetRows.OrderBy(tuple => tuple.index).ToList();
+
+            if (orderedRows.Count < populationSize)
+            {
+                Debug.LogWarning($"[GA] CSV generation {targetGeneration} contains {orderedRows.Count} individuals, but populationSize is {populationSize}. Missing entries will be randomized.");
+            }
+
+            var restoredPopulation = new List<Individual>(populationSize);
+            for (int i = 0; i < populationSize; i++)
+            {
+                float[] sourceGenes = i < orderedRows.Count ? orderedRows[i].genes : GeneticBoidAgent.GenerateRandomGenes();
+                restoredPopulation.Add(new Individual
+                {
+                    Genes = CloneGenes(sourceGenes),
+                    Fitness = 0f
+                });
+            }
+
+            individuals.Clear();
+            individuals.AddRange(restoredPopulation);
+            currentGeneration = Mathf.Max(0, targetGeneration - 1);
+            if (overwriteCsvOnStart)
+            {
+                Debug.LogWarning("[GA] CSV resume enabled. Existing CSV logs will be appended instead of overwritten to preserve history.");
+                overwriteCsvOnStart = false;
+            }
+
+            LogStatus($"Population restored from CSV '{fileName}' (generation {targetGeneration}).");
+            return true;
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError($"[GA] Failed to resume population from CSV: {ex.Message}");
+            return false;
+        }
+    }
+    #endregion
+
     #region CSV ログ出力
     private void InitializeCsvLogging()
     {
@@ -1037,6 +1173,8 @@ public class GeneticAlgorithmManager : MonoBehaviour
             sb.Append(',');
             sb.Append(GeneticBoidAgent.GeneNames[i]);
         }
+
+        sb.Append(",Fitness");
 
         return sb.ToString();
     }
@@ -1159,6 +1297,10 @@ public class GeneticAlgorithmManager : MonoBehaviour
                     sb.Append(geneValue.ToString("F4", CultureInfo.InvariantCulture));
                 }
 
+                float fitnessValue = population[i]?.Fitness ?? 0f;
+                sb.Append(',');
+                sb.Append(fitnessValue.ToString("F4", CultureInfo.InvariantCulture));
+
                 writer.WriteLine(sb.ToString());
             }
         }
@@ -1190,7 +1332,6 @@ public class GeneticAlgorithmManager : MonoBehaviour
         hasLoggedServerWait = false;
         InitializePopulationGenes();
         InitializeCsvLogging();
-        WritePopulationParametersToCsv(currentGeneration, individuals);
         ResetAgentTransformsForEvaluation();
 
         if (autoRun)

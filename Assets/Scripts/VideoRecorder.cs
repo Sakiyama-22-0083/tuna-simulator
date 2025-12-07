@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Globalization;
 using System;
@@ -70,6 +71,7 @@ public class VideoRecorder : MonoBehaviour
     private bool lastUploadSuccess = false;
     private int currentGenerationIndex = -1;
     private int currentIndividualIndex = -1;
+    private string resolvedFfmpegExecutablePath;
 
     private void LogStatus(string message)
     {
@@ -124,6 +126,8 @@ public class VideoRecorder : MonoBehaviour
         ? Mathf.RoundToInt(recordingFrameRate * recordingDuration)
         : 0;
     public int ActiveEpisodeNumber => activeRecordingEpisodeNumber;
+    public float RecordingDurationSeconds => recordingDuration;
+    public int RecordingFrameRate => recordingFrameRate;
 
     public void SetEvaluationContext(int generationIndex, int individualIndex)
     {
@@ -413,6 +417,128 @@ public class VideoRecorder : MonoBehaviour
         sessionHasRecording = true;
     }
 
+    private string GetResolvedFfmpegPath()
+    {
+        if (!string.IsNullOrEmpty(resolvedFfmpegExecutablePath) && File.Exists(resolvedFfmpegExecutablePath))
+        {
+            return resolvedFfmpegExecutablePath;
+        }
+
+        // First try the user-provided path
+        if (!string.IsNullOrWhiteSpace(ffmpegExePath))
+        {
+            string trimmed = ffmpegExePath.Trim();
+            if (Path.IsPathRooted(trimmed))
+            {
+                string expanded = ExpandHomeDirectory(trimmed);
+                if (File.Exists(expanded))
+                {
+                    resolvedFfmpegExecutablePath = expanded;
+                    return resolvedFfmpegExecutablePath;
+                }
+            }
+            else
+            {
+                string fromPath = FindExecutableOnSystemPath(trimmed);
+                if (!string.IsNullOrEmpty(fromPath))
+                {
+                    resolvedFfmpegExecutablePath = fromPath;
+                    return resolvedFfmpegExecutablePath;
+                }
+            }
+        }
+
+        foreach (string candidate in GetDefaultFfmpegSearchPaths())
+        {
+            if (File.Exists(candidate))
+            {
+                resolvedFfmpegExecutablePath = candidate;
+                return resolvedFfmpegExecutablePath;
+            }
+        }
+
+        return null;
+    }
+
+    private static string ExpandHomeDirectory(string path)
+    {
+        if (string.IsNullOrEmpty(path) || path[0] != '~')
+        {
+            return path;
+        }
+
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.Personal);
+        if (string.IsNullOrEmpty(home))
+        {
+            return path;
+        }
+
+        return Path.Combine(home, path.Substring(1));
+    }
+
+    private static string FindExecutableOnSystemPath(string executableName)
+    {
+        if (string.IsNullOrWhiteSpace(executableName))
+        {
+            return null;
+        }
+
+        string envPath = Environment.GetEnvironmentVariable("PATH");
+        if (string.IsNullOrEmpty(envPath))
+        {
+            return null;
+        }
+
+        string[] paths = envPath.Split(Path.PathSeparator);
+        bool needsExeExtension = Application.platform == RuntimePlatform.WindowsEditor || Application.platform == RuntimePlatform.WindowsPlayer;
+
+        foreach (string rawDir in paths)
+        {
+            string dir = rawDir?.Trim();
+            if (string.IsNullOrEmpty(dir))
+            {
+                continue;
+            }
+
+            string candidate = Path.Combine(dir, executableName);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            if (needsExeExtension && !candidate.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                string exeCandidate = candidate + ".exe";
+                if (File.Exists(exeCandidate))
+                {
+                    return exeCandidate;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<string> GetDefaultFfmpegSearchPaths()
+    {
+        // Common install locations for ffmpeg across OSes
+        yield return "/opt/homebrew/bin/ffmpeg";        // Apple Silicon Homebrew
+        yield return "/usr/local/bin/ffmpeg";          // Intel Homebrew / macOS
+        yield return "/usr/bin/ffmpeg";                // Linux standard package
+        string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        if (!string.IsNullOrEmpty(programFiles))
+        {
+            yield return Path.Combine(programFiles, "ffmpeg/bin/ffmpeg.exe");
+        }
+
+        string programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+        if (!string.IsNullOrEmpty(programFilesX86))
+        {
+            yield return Path.Combine(programFilesX86, "ffmpeg/bin/ffmpeg.exe");
+        }
+        yield return "C:/ffmpeg/bin/ffmpeg.exe";
+    }
+
     private IEnumerator FinalizeEpisodeRecording(int episodeNumber)
     {
         if (string.IsNullOrEmpty(activeEpisodeFolder))
@@ -422,9 +548,21 @@ public class VideoRecorder : MonoBehaviour
 
         string normalizedFolder = activeEpisodeFolder.Replace("\\", "/");
         string outputFileName = BuildEpisodeFileName(episodeNumber);
-        string ffmpegCommand = $"ffmpeg -y -framerate {recordingFrameRate} -i \"{normalizedFolder}/frame_%06d.png\" -c:v libx264 -pix_fmt yuv420p \"{normalizedFolder}/{outputFileName}\"";
-        string commandFile = Path.Combine(activeEpisodeFolder, "convert_to_video.bat");
-        yield return StartCoroutine(WriteFileWithRetry(commandFile, System.Text.Encoding.UTF8.GetBytes(ffmpegCommand + "\npause"), 3));
+        string executableForScript = GetResolvedFfmpegPath() ?? ffmpegExePath ?? "ffmpeg";
+        string ffmpegCommand = $"\"{executableForScript}\" -y -framerate {recordingFrameRate} -i \"{normalizedFolder}/frame_%06d.png\" -c:v libx264 -pix_fmt yuv420p \"{normalizedFolder}/{outputFileName}\"";
+        bool isWindows = Application.platform == RuntimePlatform.WindowsEditor || Application.platform == RuntimePlatform.WindowsPlayer;
+        string scriptName = isWindows ? "convert_to_video.bat" : "convert_to_video.sh";
+        string commandFile = Path.Combine(activeEpisodeFolder, scriptName);
+        string scriptBody = isWindows
+            ? ffmpegCommand + "\r\npause\r\n"
+            : "#!/bin/bash\n" + ffmpegCommand + "\nread -p \"Press Enter to exit\"\n";
+
+        yield return StartCoroutine(WriteFileWithRetry(commandFile, System.Text.Encoding.UTF8.GetBytes(scriptBody), 3));
+
+        if (!isWindows)
+        {
+            TryMakeScriptExecutable(commandFile);
+        }
 
         if (autoEncodeToMp4)
         {
@@ -540,6 +678,38 @@ public class VideoRecorder : MonoBehaviour
         }
     }
 
+        private void TryMakeScriptExecutable(string scriptPath)
+        {
+            if (string.IsNullOrEmpty(scriptPath))
+            {
+                return;
+            }
+
+            try
+            {
+                var chmodInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "/bin/chmod",
+                    Arguments = $"+x \"{scriptPath}\"",
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    RedirectStandardError = false,
+                    RedirectStandardOutput = false
+                };
+
+                var process = System.Diagnostics.Process.Start(chmodInfo);
+                if (process != null)
+                {
+                    process.WaitForExit(200);
+                    process.Dispose();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[VideoRecorder] Failed to set execute permission on script {scriptPath}: {ex.Message}");
+            }
+        }
+
     /// <summary>
     /// ファイル書き込みをリトライ機能付きで実行
     /// </summary>
@@ -638,6 +808,13 @@ public class VideoRecorder : MonoBehaviour
         string pattern = Path.Combine(episodeFolder, "frame_%06d.png");
         string outputMp4 = Path.Combine(episodeFolder, BuildEpisodeFileName(episodeNumber));
 
+        string executablePath = GetResolvedFfmpegPath();
+        if (string.IsNullOrEmpty(executablePath))
+        {
+            Debug.LogError("[VideoRecorder] FFmpeg executable not found. Set 'ffmpegExePath' or install ffmpeg so recordings can be converted automatically.");
+            yield break;
+        }
+
         // 既存のMP4ファイルがある場合は削除を試行
         if (File.Exists(outputMp4))
         {
@@ -651,7 +828,7 @@ public class VideoRecorder : MonoBehaviour
 
         var psi = new System.Diagnostics.ProcessStartInfo
         {
-            FileName = ffmpegExePath, // 例: "C:\\ffmpeg\\bin\\ffmpeg.exe"
+            FileName = executablePath,
             Arguments = $"-y -f image2 -framerate {recordingFrameRate} -i \"{pattern}\" -c:v libx264 -pix_fmt yuv420p -movflags +faststart \"{outputMp4}\"",
             CreateNoWindow = true,
             UseShellExecute = false,

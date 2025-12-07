@@ -62,9 +62,6 @@
     <Analyzer Include="/Users/fuma/.vscode/extensions/visualstudiotoolsforunity.vstuc-1.2.0/Analyzers/Microsoft.Unity.Analyzers.dll" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Assets/Scripts/Agents/LFGenerator.cs" />
-    <Compile Include="Assets/Scripts/Agents/Leader.cs" />
-    <Compile Include="Assets/Scripts/Agents/Follower.cs" />
     <Compile Include="Assets/Scripts/GeneticAlgorithmManager.cs" />
     <Compile Include="Assets/ThirdParty/UnityTechnologies/EffectExamples/Shared/Scripts/DecalDestroyer.cs" />
     <Compile Include="Assets/Scripts/particle2.cs" />
@@ -85,6 +82,7 @@
     <Compile Include="Assets/ThirdParty/Water Saface/Simple Water Shader/Resources/WaterReflection.cs" />
     <Compile Include="Assets/Scripts/particle1.cs" />
     <Compile Include="Assets/ThirdParty/UnityTechnologies/EffectExamples/Shared/Scripts/GunAim.cs" />
+    <Compile Include="Assets/Scripts/Camera/TunaBoidCameraRecorder.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Assets/Terrain/MeshTerrainEditor/EditorResources/Shaders/ConverterSplitPreview_URP.shader" />

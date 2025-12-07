@@ -569,12 +569,12 @@ MonoBehaviour:
   destination: {x: 0, y: 0, z: 0}
   rotationSpeed: 0.05
   innerRadius: 3
-  separatePower: 1
+  separatePower: 0
   alignPower: 1
   cohesionPower: 1
   destinationPower: 0.2
   obstacleAvoidWeight: 1
-  maxAgentsConsidered: 5
+  maxAgentsConsidered: 10
 --- !u!1 &4105518832063977475
 GameObject:
   m_ObjectHideFlags: 0

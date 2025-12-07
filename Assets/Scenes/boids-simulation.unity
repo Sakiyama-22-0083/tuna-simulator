@@ -2062,17 +2062,25 @@ MonoBehaviour:
   m_GameObject: {fileID: 870610533}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4c8a3dfcf021adb42847be635778c271, type: 3}
+  m_Script: {fileID: 11500000, guid: 227104f87bcba46d2aea25686242c304, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  moveDurationSeconds: 0
-  maxDistanceToFocus: 7
+  autoFindBoids: 1
+  targetCamera: {fileID: 870610535}
+  followDistance: 10
+  positionSmoothTime: 0
+  orbitDegreesPerSecond: 15
+  lookLerpSpeed: 6
+  movementIntervalSeconds: 5
+  movementDurationSeconds: 0
+  continuousTracking: 0
+  objectGenerator: {fileID: 1554092671}
+  maxDistanceToFocus: 10
   lookDownAngleDegrees: 20
+  autoStartRecordingOnPlay: 1
+  loopRecording: 1
   videoRecorder: {fileID: 870610539}
-  geneticAlgorithmManager: {fileID: 2044161435}
   recordingTailSeconds: 0.5
-  serverScoreTimeoutSeconds: 1800
-  prioritizeAgentCenter: 1
 --- !u!114 &870610539
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2094,15 +2102,15 @@ MonoBehaviour:
   autoEncodeToMp4: 1
   ffmpegExePath: ffmpeg
   deleteFramesAfterEncode: 0
-  overwriteExistingRecordings: 0
+  overwriteExistingRecordings: 1
   lockCaptureFramerate: 1
   archiveUploadedVideos: 1
   uploadArchiveSubdirectory: Uploaded
   serverBaseUrl: http://localhost:8000
-  serverTimeout: 1800
+  serverTimeout: 180
   maxRetryAttempts: 5
   retryDelay: 2
-  enableDetailedLogging: 1
+  enableDetailedLogging: 0
 --- !u!1001 &899462439
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -3366,7 +3374,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!114 &1554092671
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4645,78 +4653,6 @@ Mesh:
     offset: 0
     size: 0
     path: 
---- !u!1 &2044161434
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 2044161436}
-  - component: {fileID: 2044161435}
-  m_Layer: 0
-  m_Name: ga-manager
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &2044161435
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2044161434}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c0f15003eaafbb4448bd7829bba2561b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  populationSize: 20
-  eliteCount: 2
-  mutationRate: 0.1
-  mutationStrength: 0.2
-  crossoverRate: 0.8
-  maxGenerations: 100
-  autoRun: 1
-  agentPrefab: {fileID: 4105506564861623119, guid: ed926511b1b6d3d4e9712ee69de6a559,
-    type: 3}
-  spawnRange: 14
-  spawnHeight: 14
-  agentsPerEvaluation: 80
-  spawnMaxAttempts: 64
-  spawnCollisionMask:
-    serializedVersion: 2
-    m_Bits: 4294967291
-  spawnFallbackRadius: 1.5
-  videoRecorder: {fileID: 870610539}
-  serverScoreTimeoutSeconds: 1800
-  serverHealthUrl: http://127.0.0.1:8000/health
-  serverHealthRetryIntervalSeconds: 2
-  serverHealthRequestTimeoutSeconds: 5
-  enableDetailedLogging: 1
-  logBestGenes: 1
-  enableCsvLogging: 1
-  csvFileName: ga_progress.csv
-  overwriteCsvOnStart: 1
-  populationCsvFileName: ga_population.csv
---- !u!4 &2044161436
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2044161434}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 50, y: 40.5, z: 50}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_RootOrder: 5
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!43 &2050488095
 Mesh:
   m_ObjectHideFlags: 0

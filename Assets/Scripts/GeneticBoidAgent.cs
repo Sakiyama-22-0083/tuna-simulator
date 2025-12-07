@@ -31,8 +31,8 @@ public class GeneticBoidAgent : MonoBehaviour
     };
 
     // 遺伝子ごとの下限・上限
-    public static readonly float[] GeneMins = { 0f, 0f, 0f, 0f, 0.5f, 0.5f };
-    public static readonly float[] GeneMaxs = { 3f, 3f, 3f, 3f, 5f, 5f };
+    public static readonly float[] GeneMins = { 0f, 0f, 0f, 0f, 0.1f, 0.1f };
+    public static readonly float[] GeneMaxs = { 10f, 10f, 10f, 10f, 10f, 5f };
 
     public static float ClampGene(int index, float value)
     {
@@ -214,7 +214,7 @@ public class GeneticBoidAgent : MonoBehaviour
         rBody.velocity = transform.forward * baseSpeed;
 
         // 適応度を評価
-        EvaluateFitness();
+        // EvaluateFitness();
     }
     #endregion
 
@@ -492,36 +492,36 @@ public class GeneticBoidAgent : MonoBehaviour
     /// <summary>
     /// 各ステップで適応度を評価
     /// </summary>
-    private void EvaluateFitness()
-    {
-        evaluationSteps++;
+    // private void EvaluateFitness()
+    // {
+    //     evaluationSteps++;
 
-        // 1. 群れのまとまり度（近くにいるエージェントの数）
-        float cohesionScore = nearbyAgents.Count / 10f; // 最大10体を理想とする
-        cohesionScore = Mathf.Min(cohesionScore, 1f);
-        totalGroupCohesion += cohesionScore;
+    //     // 1. 群れのまとまり度（近くにいるエージェントの数）
+    //     float cohesionScore = nearbyAgents.Count / 10f; // 最大10体を理想とする
+    //     cohesionScore = Mathf.Min(cohesionScore, 1f);
+    //     totalGroupCohesion += cohesionScore;
 
-        // 2. 動きの滑らかさ（角速度が小さいほど良い）
-        float smoothness = 1f - Mathf.Min(rBody.angularVelocity.magnitude / 5f, 1f);
-        totalSmoothness += smoothness;
+    //     // 2. 動きの滑らかさ（角速度が小さいほど良い）
+    //     float smoothness = 1f - Mathf.Min(rBody.angularVelocity.magnitude / 5f, 1f);
+    //     totalSmoothness += smoothness;
 
-        // 3. 速度の安定性
-        float speedStability = 1f - Mathf.Abs(rBody.velocity.magnitude - baseSpeed) / baseSpeed;
-        speedStability = Mathf.Max(speedStability, 0f);
-        totalSpeed += speedStability;
+    //     // 3. 速度の安定性
+    //     float speedStability = 1f - Mathf.Abs(rBody.velocity.magnitude - baseSpeed) / baseSpeed;
+    //     speedStability = Mathf.Max(speedStability, 0f);
+    //     totalSpeed += speedStability;
 
-        // 適応度を計算（各指標の平均）
-        if (evaluationSteps > 0)
-        {
-            float avgCohesion = totalGroupCohesion / evaluationSteps;
-            float avgSmoothness = totalSmoothness / evaluationSteps;
-            float avgSpeed = totalSpeed / evaluationSteps;
-            float collisionPenalty = collisionCount * 0.1f;
+    //     // 適応度を計算（各指標の平均）
+    //     if (evaluationSteps > 0)
+    //     {
+    //         float avgCohesion = totalGroupCohesion / evaluationSteps;
+    //         float avgSmoothness = totalSmoothness / evaluationSteps;
+    //         float avgSpeed = totalSpeed / evaluationSteps;
+    //         float collisionPenalty = collisionCount * 0.1f;
 
-            fitness = (avgCohesion * 0.4f + avgSmoothness * 0.3f + avgSpeed * 0.3f) - collisionPenalty;
-            fitness = Mathf.Max(fitness, 0f);
-        }
-    }
+    //         fitness = (avgCohesion * 0.4f + avgSmoothness * 0.3f + avgSpeed * 0.3f) - collisionPenalty;
+    //         fitness = Mathf.Max(fitness, 0f);
+    //     }
+    // }
 
     /// <summary>
     /// 衝突検出
@@ -592,29 +592,6 @@ public class GeneticBoidAgent : MonoBehaviour
             Random.Range(0f, 360f),
             Random.Range(-10f, 10f)
         );
-    }
-    #endregion
-
-    #region デバッグ可視化
-    private void OnDrawGizmosSelected()
-    {
-        // 検出範囲
-        Gizmos.color = Color.green;
-        Gizmos.DrawWireSphere(transform.position, detectionRadius);
-
-        // 分離範囲
-        Gizmos.color = Color.red;
-        Gizmos.DrawWireSphere(transform.position, separationRadius);
-
-        // 近くのエージェントへの線
-        Gizmos.color = Color.yellow;
-        foreach (GeneticBoidAgent agent in nearbyAgents)
-        {
-            if (agent != null)
-            {
-                Gizmos.DrawLine(transform.position, agent.transform.position);
-            }
-        }
     }
     #endregion
 }

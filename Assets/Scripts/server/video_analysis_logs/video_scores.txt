@@ -592,3 +592,13 @@ Timestamp           | Episode | Attempt | Size(MB) | Score  | Analysis(s)
 2025-12-02 00:16:48 | Episode:  153 | Attempt: 1 | Size:   0.43MB | Event: RECEIVED | File: Generation_008_013.mp4
 2025-12-02 00:19:29 | Episode:  153 | Attempt: 1 | Size:   0.43MB | Score: 0.0352 | Analysis: 160.99s
 2025-12-02 00:19:40 | Episode:  154 | Attempt: 1 | Size:   0.43MB | Event: RECEIVED | File: Generation_008_014.mp4
+2025-12-08 00:43:30 | Episode:    1 | Attempt: 1 | Size:   0.20MB | Event: RECEIVED | File: Episode_000001.mp4
+2025-12-08 00:43:40 | Episode:    2 | Attempt: 1 | Size:   0.50MB | Event: RECEIVED | File: Episode_000002.mp4
+2025-12-08 00:43:50 | Episode:    3 | Attempt: 1 | Size:   0.70MB | Event: RECEIVED | File: Episode_000003.mp4
+2025-12-08 00:43:59 | Episode:    4 | Attempt: 1 | Size:   0.74MB | Event: RECEIVED | File: Episode_000004.mp4
+2025-12-08 00:44:08 | Episode:    5 | Attempt: 1 | Size:   0.74MB | Event: RECEIVED | File: Episode_000005.mp4
+2025-12-08 00:44:16 | Episode:    6 | Attempt: 1 | Size:   0.63MB | Event: RECEIVED | File: Episode_000006.mp4
+2025-12-08 00:44:54 | Episode:    1 | Attempt: 1 | Size:   0.20MB | Score: 0.0000 | Analysis:  83.66s
+2025-12-08 00:48:12 | Episode:    2 | Attempt: 1 | Size:   0.50MB | Score: 0.0000 | Analysis: 272.16s
+2025-12-08 00:52:19 | Episode:    3 | Attempt: 1 | Size:   0.70MB | Score: 0.0000 | Analysis: 509.44s
+2025-12-08 00:58:08 | Episode:    4 | Attempt: 1 | Size:   0.74MB | Score: 0.0000 | Analysis: 849.48s

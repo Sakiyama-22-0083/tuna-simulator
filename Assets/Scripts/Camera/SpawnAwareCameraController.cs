@@ -19,6 +19,9 @@ public class SpawnAwareCameraController : MonoBehaviour
     [SerializeField, Tooltip("Maximum seconds to wait for the server score before continuing. Set to 0 for no timeout.")] private float serverScoreTimeoutSeconds = 180f;
     [SerializeField, Tooltip("Track the actual boid cluster center immediately, even before the first recording.")]
     private bool prioritizeAgentCenter = true;
+    [SerializeField, Tooltip("Seconds to wait before repositioning the camera for each evaluation.")] private float preMoveDelaySeconds = 3f;
+    [SerializeField, Tooltip("Desired recording duration (seconds) enforced on the VideoRecorder before each capture.")] private float enforcedRecordingDurationSeconds = 5f;
+    [SerializeField, Tooltip("Desired recording frame rate enforced on the VideoRecorder before each capture.")] private int enforcedRecordingFrameRate = 15;
 
     private Coroutine initializationRoutine;
     private Coroutine evaluationRoutine;
@@ -54,6 +57,21 @@ public class SpawnAwareCameraController : MonoBehaviour
         if (videoRecorder == null)
         {
             videoRecorder = FindObjectOfType<VideoRecorder>();
+        }
+
+        ApplyEnforcedRecorderSettings();
+    }
+
+    private void ApplyEnforcedRecorderSettings()
+    {
+        if (videoRecorder == null)
+        {
+            return;
+        }
+
+        if (enforcedRecordingDurationSeconds > 0f || enforcedRecordingFrameRate > 0)
+        {
+            videoRecorder.ConfigureRecordingWindow(enforcedRecordingDurationSeconds, enforcedRecordingFrameRate);
         }
     }
 
@@ -228,6 +246,12 @@ public class SpawnAwareCameraController : MonoBehaviour
         startRequestPending = false;
 
         bool useInstantMove = !hasAlignedOnce;
+
+        if (preMoveDelaySeconds > 0f)
+        {
+            yield return new WaitForSeconds(preMoveDelaySeconds);
+        }
+
         yield return EnsureCameraPosition(useInstantMove, true);
         hasAlignedOnce = true;
 

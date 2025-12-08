@@ -568,8 +568,8 @@ MonoBehaviour:
   moveSpeed: 60
   destination: {x: 0, y: 0, z: 0}
   rotationSpeed: 0.05
-  innerRadius: 3
-  separatePower: 0
+  innerRadius: 5
+  separatePower: 1
   alignPower: 1
   cohesionPower: 1
   destinationPower: 0.2

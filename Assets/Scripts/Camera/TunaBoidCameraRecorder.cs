@@ -330,39 +330,20 @@ public class TunaBoidCameraRecorder : MonoBehaviour
     private (Vector3 position, Quaternion rotation) ComputeCameraGoal(Vector3 centroid, float deltaSeconds)
     {
         Vector3 focusPoint = centroid;
-        if (objectGenerator != null)
-        {
-            Vector3 orbitCenter = GetGeneratorCenterWorld();
-            Vector3 generatorDesiredPosition = ComputeClosestPointOnGeneratorCircle(orbitCenter, focusPoint);
-            float generatorHorizontalDistance = new Vector2(generatorDesiredPosition.x - focusPoint.x, generatorDesiredPosition.z - focusPoint.z).magnitude;
-            float generatorHeightOffset = ComputeHeightOffset(generatorHorizontalDistance);
-            generatorDesiredPosition.y = focusPoint.y + generatorHeightOffset;
+        Vector3 orbitCenter = objectGenerator != null
+            ? GetGeneratorCenterWorld()
+            : focusPoint;
+        float orbitRadius = Mathf.Max(0.1f, followDistance);
 
-            Quaternion spawnAwareRotation = BuildLookRotation(generatorDesiredPosition, focusPoint);
-            return (generatorDesiredPosition, spawnAwareRotation);
-        }
+        Vector3 planarPoint = ComputeNearestPointOnCircle(orbitCenter, orbitRadius, focusPoint, deltaSeconds);
+        planarPoint = ClampDistanceToFocus(planarPoint, focusPoint);
 
-        float orbitDelta = orbitDegreesPerSecond * Mathf.Max(0f, deltaSeconds);
-        currentOrbitAngle += orbitDelta;
-        Quaternion orbitRotation = Quaternion.Euler(0f, currentOrbitAngle, 0f);
-        Vector3 orbitOffset = orbitRotation * Vector3.back;
-        if (orbitOffset.sqrMagnitude < 0.0001f)
-        {
-            orbitOffset = Vector3.back;
-        }
-
-        orbitOffset.Normalize();
-        Vector3 desiredPosition = centroid + orbitOffset * followDistance;
-        float horizontalDistance = new Vector2(desiredPosition.x - focusPoint.x, desiredPosition.z - focusPoint.z).magnitude;
+        float horizontalDistance = new Vector2(planarPoint.x - focusPoint.x, planarPoint.z - focusPoint.z).magnitude;
         float heightOffset = ComputeHeightOffset(horizontalDistance);
-        desiredPosition.y = focusPoint.y + heightOffset;
+        planarPoint.y = focusPoint.y + heightOffset;
 
-        Vector3 lookDirection = centroid - desiredPosition;
-        Quaternion targetRotation = lookDirection.sqrMagnitude > 0.001f
-            ? BuildLookRotation(desiredPosition, centroid)
-            : transform.rotation;
-
-        return (desiredPosition, targetRotation);
+        Quaternion targetRotation = BuildLookRotation(planarPoint, focusPoint);
+        return (planarPoint, targetRotation);
     }
 
     private Vector3 GetGeneratorCenterWorld()
@@ -375,23 +356,30 @@ public class TunaBoidCameraRecorder : MonoBehaviour
         return objectGenerator.transform.position;
     }
 
-    private Vector3 ComputeClosestPointOnGeneratorCircle(Vector3 orbitCenter, Vector3 focusPoint)
+    private Vector3 ComputeNearestPointOnCircle(Vector3 circleCenter, float radius, Vector3 focusPoint, float deltaSeconds)
     {
-        if (objectGenerator == null)
-        {
-            return orbitCenter;
-        }
-
-        float radius = Mathf.Max(0.1f, objectGenerator.spawnRadius);
-        Vector3 direction = focusPoint - orbitCenter;
+        Vector3 direction = focusPoint - circleCenter;
         direction.y = 0f;
+
         if (direction.sqrMagnitude < 0.0001f)
         {
-            direction = Quaternion.Euler(0f, currentOrbitAngle, 0f) * Vector3.forward;
+            Vector3 fallback = transform.position - circleCenter;
+            fallback.y = 0f;
+            if (fallback.sqrMagnitude > 0.0001f)
+            {
+                direction = fallback;
+            }
+            else
+            {
+                currentOrbitAngle += orbitDegreesPerSecond * Mathf.Max(0f, deltaSeconds);
+                direction = Quaternion.Euler(0f, currentOrbitAngle, 0f) * Vector3.forward;
+            }
         }
 
         direction.Normalize();
-        return orbitCenter + direction * radius;
+        Vector3 point = circleCenter + direction * radius;
+        point.y = circleCenter.y;
+        return point;
     }
 
     private Vector3 ClampDistanceToFocus(Vector3 desiredPosition, Vector3 focusPoint)

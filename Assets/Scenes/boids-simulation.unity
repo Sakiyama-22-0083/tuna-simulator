@@ -17,7 +17,7 @@ RenderSettings:
   m_Fog: 1
   m_FogColor: {r: 0.0983001, g: 0.34022316, b: 0.4433962, a: 1}
   m_FogMode: 2
-  m_FogDensity: 0.3
+  m_FogDensity: 0.4
   m_LinearFogStart: 0
   m_LinearFogEnd: 300
   m_AmbientSkyColor: {r: 0.212, g: 0.227, b: 0.259, a: 1}
@@ -2067,7 +2067,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   autoFindBoids: 1
   targetCamera: {fileID: 870610535}
-  followDistance: 10
+  followDistance: 14
   positionSmoothTime: 0
   orbitDegreesPerSecond: 15
   lookLerpSpeed: 6
@@ -2075,7 +2075,7 @@ MonoBehaviour:
   movementDurationSeconds: 0
   continuousTracking: 0
   objectGenerator: {fileID: 1554092671}
-  maxDistanceToFocus: 10
+  maxDistanceToFocus: 8
   lookDownAngleDegrees: 20
   autoStartRecordingOnPlay: 1
   loopRecording: 1
@@ -2111,6 +2111,7 @@ MonoBehaviour:
   maxRetryAttempts: 5
   retryDelay: 2
   enableDetailedLogging: 0
+  uploadToServer: 0
 --- !u!1001 &899462439
 PrefabInstance:
   m_ObjectHideFlags: 0

@@ -50,6 +50,8 @@ public class VideoRecorder : MonoBehaviour
     [Header("Recording Persistence")]
     [SerializeField, Tooltip("サーバーに送信する MP4 を Recordings フォルダ配下にアーカイブ保存するかどうか。")] private bool archiveUploadedVideos = true;
     [SerializeField, Tooltip("アーカイブを保存するサブフォルダ名（Recordings/以下）")] private string uploadArchiveSubdirectory = "Uploaded";
+    [SerializeField, Tooltip("全てのMP4をひとつのサブフォルダに集約保存するかどうか。")] private bool consolidateVideosIntoSingleFolder = true;
+    [SerializeField, Tooltip("集約保存するサブフォルダ名（Recordings/以下）。空欄で Recordings 直下へ保存。")] private string consolidatedVideoSubfolder = "Videos";
 
     [Header("Server Communication")]
     [SerializeField] private string serverBaseUrl = "http://localhost:8000";
@@ -57,6 +59,7 @@ public class VideoRecorder : MonoBehaviour
     [SerializeField] private int maxRetryAttempts = 5;
     [SerializeField] private float retryDelay = 2f;
     [SerializeField] private bool enableDetailedLogging = false; // デフォルトでログを無効化
+    [SerializeField, Tooltip("Disable to skip uploading recordings to the configured server.")] private bool uploadToServer = true;
 
     // Event for distributing rewards to all agents
     public System.Action<float> OnRewardReceived;
@@ -128,6 +131,31 @@ public class VideoRecorder : MonoBehaviour
     public int ActiveEpisodeNumber => activeRecordingEpisodeNumber;
     public float RecordingDurationSeconds => recordingDuration;
     public int RecordingFrameRate => recordingFrameRate;
+
+    /// <summary>
+    /// Override the recording window so external controllers can ensure consistent clip lengths.
+    /// </summary>
+    public void ConfigureRecordingWindow(float durationSeconds, int frameRate)
+    {
+        bool changed = false;
+
+        if (durationSeconds > 0f && !Mathf.Approximately(durationSeconds, recordingDuration))
+        {
+            recordingDuration = durationSeconds;
+            changed = true;
+        }
+
+        if (frameRate > 0 && frameRate != recordingFrameRate)
+        {
+            recordingFrameRate = frameRate;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            LogStatus($"Recording window enforced: {recordingDuration:F2}s @ {recordingFrameRate} FPS ({FramesPerSegment} frames).");
+        }
+    }
 
     public void SetEvaluationContext(int generationIndex, int individualIndex)
     {
@@ -883,11 +911,24 @@ public class VideoRecorder : MonoBehaviour
                     yield return StartCoroutine(CleanupFrameFiles(episodeFolder));
                 }
                 
+                string finalOutputPath = outputMp4;
+                if (consolidateVideosIntoSingleFolder)
+                {
+                    string relocatedPath = TryRelocateVideoToConsolidatedFolder(outputMp4);
+                    if (!string.IsNullOrEmpty(relocatedPath))
+                    {
+                        finalOutputPath = relocatedPath;
+                    }
+                }
+
                 // エンコード成功を通知
-                OnMp4Encoded?.Invoke(outputMp4, episodeNumber, true);
+                OnMp4Encoded?.Invoke(finalOutputPath, episodeNumber, true);
                 
-                // Upload to server and distribute reward
-                StartCoroutine(UploadVideoToServer(outputMp4, episodeNumber));
+                // Upload to server and distribute reward when enabled
+                if (uploadToServer)
+                {
+                    StartCoroutine(UploadVideoToServer(finalOutputPath, episodeNumber));
+                }
             }
             else
             {
@@ -1011,6 +1052,55 @@ public class VideoRecorder : MonoBehaviour
         }
         
         // クリーンアップ完了ログは削除（通常動作のため不要）
+    }
+
+    private string TryRelocateVideoToConsolidatedFolder(string sourcePath)
+    {
+        if (string.IsNullOrEmpty(sourcePath))
+        {
+            return sourcePath;
+        }
+
+        if (!File.Exists(sourcePath))
+        {
+            Debug.LogWarning($"[VideoRecorder] Consolidation skipped. Source missing: {sourcePath}");
+            return sourcePath;
+        }
+
+        string recordingsRoot = Path.Combine(Application.dataPath, "..", outputDirectory);
+        string targetDirectory = recordingsRoot;
+        if (!string.IsNullOrWhiteSpace(consolidatedVideoSubfolder))
+        {
+            targetDirectory = Path.Combine(recordingsRoot, consolidatedVideoSubfolder.Trim());
+        }
+
+        try
+        {
+            Directory.CreateDirectory(targetDirectory);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning($"[VideoRecorder] Failed to create consolidated folder '{targetDirectory}': {ex.Message}");
+            return sourcePath;
+        }
+
+        string destinationPath = Path.Combine(targetDirectory, Path.GetFileName(sourcePath));
+
+        try
+        {
+            if (File.Exists(destinationPath))
+            {
+                File.Delete(destinationPath);
+            }
+
+            File.Move(sourcePath, destinationPath);
+            return destinationPath;
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning($"[VideoRecorder] Failed to relocate MP4 to '{destinationPath}': {ex.Message}");
+            return sourcePath;
+        }
     }
 
     /// <summary>

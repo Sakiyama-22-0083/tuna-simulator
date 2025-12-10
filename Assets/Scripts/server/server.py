@@ -31,18 +31,10 @@ except Exception:  # pragma: no cover - transformers may be missing
     VideoMAEForVideoClassification = None
     TRANSFORMERS_AVAILABLE = False
 
-SAM2_ROOT = os.path.join(os.path.dirname(__file__), "segment-anything-2")
-if os.path.isdir(SAM2_ROOT) and SAM2_ROOT not in sys.path:
-    sys.path.append(SAM2_ROOT)
-
-try:
-    from sam2.build_sam import build_sam2_video_predictor_hf
-    from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
-    SAM2_AVAILABLE = True
-except Exception:  # pragma: no cover - SAM2 may be unavailable
-    build_sam2_video_predictor_hf = None
-    SAM2AutomaticMaskGenerator = None
-    SAM2_AVAILABLE = False
+"""SAM2 video segmentation support is disabled; classify raw clips directly."""
+SAM2_AVAILABLE = False
+build_sam2_video_predictor_hf = None
+SAM2AutomaticMaskGenerator = None
 
 # ログ設定
 logging.basicConfig(level=logging.INFO)
@@ -70,19 +62,20 @@ SCORE_LOG_FILE = os.path.join(LOG_DIR, "video_scores.txt")
 # ログディレクトリを作成
 os.makedirs(LOG_DIR, exist_ok=True)
 
-# セグメンテーションおよび分類の設定
+"""SAM2 segmentation parameters disabled
 SEGMENT_MODEL_ID = os.getenv("SAM2_MODEL_ID", "facebook/sam2.1-hiera-large")
 SEGMENT_MAX_WIDTH = int(os.getenv("SAM2_MAX_WIDTH", "640"))
-SEGMENT_BACKGROUND_RATIO = float(os.getenv("SAM2_BACKGROUND_RATIO", "0.2"))
+SEGMENT_BACKGROUND_RATIO = float(os.getenv("SAM2_BACKGROUND_RATIO", "0.1"))
 SEGMENT_OBJECT_COLOR = (0, 255, 0)
+"""
 
 VIDEO_CLASS_MODEL_PATH = os.getenv(
     "VIDEO_CLASS_MODEL_PATH",
-    os.path.join(os.path.dirname(__file__), "finetune_output_tuna_vs_other/checkpoint-207"),
+    os.path.join(os.path.dirname(__file__), "finetune_output_tuna_vs_other/checkpoint-825"),
 )
 VIDEO_CLASS_BASE_MODEL = os.getenv("VIDEO_CLASS_BASE_MODEL", "MCG-NJU/videomae-base")
 VIDEO_CLASS_FRAME_COUNT = int(os.getenv("VIDEO_CLASS_FRAME_COUNT", "16"))
-VIDEO_CLASS_NAMES = ["simulator", "real"]
+VIDEO_CLASS_NAMES = ["simulator1","simulator2","simulator3", "real"]
 
 # モデルキャッシュとロック
 sam2_predictor = None
@@ -187,173 +180,18 @@ def initialize_log_file():
             logger.error(f"Failed to initialize log file: {e}")
 
 
+"""SAM2 segmentation helpers are disabled.
+
 def get_sam2_components():
-    if not SAM2_AVAILABLE or torch is None or cv2 is None:
-        raise RuntimeError("SAM2 dependencies are not available")
+    ...
 
-    global sam2_predictor, sam2_mask_generator, sam2_device
-    with sam2_init_lock:
-        if sam2_predictor is None:
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            logger.info(f"Loading SAM2 predictor on {device}...")
-            sam2_predictor = build_sam2_video_predictor_hf(SEGMENT_MODEL_ID, device=device)
-            sam2_mask_generator = SAM2AutomaticMaskGenerator(
-                sam2_predictor,
-                points_per_side=24,
-                pred_iou_thresh=0.75,
-                stability_score_thresh=0.92,
-                crop_n_layers=1,
-                crop_n_points_downscale_factor=2,
-            )
-            sam2_device = device
-            logger.info("SAM2 predictor ready")
+def classify_masks_by_area(...):
+    ...
 
-    return sam2_predictor, sam2_mask_generator
+def segment_uploaded_video(...):
+    ...
 
-
-def classify_masks_by_area(masks, frame_width: int, frame_height: int, background_ratio: float):
-    total_area = max(frame_width * frame_height, 1)
-    background_ids = []
-    object_ids = []
-
-    for idx, mask_data in enumerate(masks):
-        area_ratio = mask_data.get("area", 0) / total_area
-        if area_ratio >= background_ratio:
-            background_ids.append(idx)
-        else:
-            object_ids.append(idx)
-
-    return background_ids, object_ids
-
-
-def segment_uploaded_video(input_path: str) -> Optional[str]:
-    if not SAM2_AVAILABLE or torch is None or cv2 is None:
-        logger.warning("SAM2 segmentation not available; skipping")
-        return None
-
-    try:
-        predictor, mask_generator = get_sam2_components()
-    except Exception as exc:
-        logger.error(f"Failed to prepare SAM2 components: {exc}")
-        return None
-
-    with sam2_infer_lock:
-        try:
-            cap = cv2.VideoCapture(input_path)
-            if not cap.isOpened():
-                logger.error("Unable to open video for segmentation")
-                return None
-
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            if not fps or fps <= 0:
-                fps = 30.0
-            src_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 1
-            src_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 1
-
-            scale_factor = 1.0
-            if src_width > SEGMENT_MAX_WIDTH:
-                scale_factor = SEGMENT_MAX_WIDTH / float(src_width)
-
-            target_width = max(int(src_width * scale_factor), 1)
-            target_height = max(int(src_height * scale_factor), 1)
-
-            frame_files = []
-            with tempfile.TemporaryDirectory() as frames_dir:
-                frame_idx = 0
-                while True:
-                    ret, frame = cap.read()
-                    if not ret:
-                        break
-                    if scale_factor < 1.0:
-                        frame = cv2.resize(
-                            frame,
-                            (target_width, target_height),
-                            interpolation=cv2.INTER_AREA,
-                        )
-                    frame_path = os.path.join(frames_dir, f"{frame_idx:05d}.jpg")
-                    cv2.imwrite(frame_path, frame)
-                    frame_files.append(frame_path)
-                    frame_idx += 1
-
-                cap.release()
-
-                if not frame_files:
-                    logger.warning("No frames extracted for segmentation")
-                    return None
-
-                inference_state = predictor.init_state(video_path=frames_dir)
-                predictor.reset_state(inference_state)
-
-                first_frame_bgr = cv2.imread(frame_files[0])
-                if first_frame_bgr is None:
-                    logger.warning("Failed to read first frame for segmentation")
-                    return None
-
-                first_frame_rgb = cv2.cvtColor(first_frame_bgr, cv2.COLOR_BGR2RGB)
-                masks = mask_generator.generate(first_frame_rgb)
-                if not masks:
-                    logger.warning("SAM2 produced no masks; skipping segmentation")
-                    return None
-
-                masks = sorted(masks, key=lambda x: x.get("area", 0), reverse=True)
-                background_ids, _ = classify_masks_by_area(
-                    masks,
-                    target_width,
-                    target_height,
-                    SEGMENT_BACKGROUND_RATIO,
-                )
-
-                for obj_idx, mask_data in enumerate(masks):
-                    segmentation = mask_data.get("segmentation")
-                    if segmentation is None:
-                        continue
-                    y_idx, x_idx = np.where(segmentation)
-                    if y_idx.size == 0:
-                        continue
-                    point = np.array([[float(x_idx.mean()), float(y_idx.mean())]], dtype=np.float32)
-                    predictor.add_new_points_or_box(
-                        inference_state=inference_state,
-                        frame_idx=0,
-                        obj_id=obj_idx,
-                        points=point,
-                        labels=np.array([1], dtype=np.int32),
-                    )
-
-                video_segments = {}
-                for out_frame_idx, out_obj_ids, out_mask_logits in predictor.propagate_in_video(inference_state):
-                    video_segments[out_frame_idx] = {
-                        out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy()[0]
-                        for i, out_obj_id in enumerate(out_obj_ids)
-                    }
-
-                predictor.reset_state(inference_state)
-
-                tmp_output = tempfile.NamedTemporaryFile(delete=False, suffix="_segmented.mp4")
-                output_path = tmp_output.name
-                tmp_output.close()
-
-                fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-                writer = cv2.VideoWriter(output_path, fourcc, fps, (target_width, target_height))
-                object_color = np.array(SEGMENT_OBJECT_COLOR, dtype=np.uint8)
-
-                for idx, frame_path in enumerate(frame_files):
-                    mask_dict = video_segments.get(idx)
-                    result_frame = np.zeros((target_height, target_width, 3), dtype=np.uint8)
-                    if mask_dict:
-                        for obj_id, mask in mask_dict.items():
-                            if obj_id in background_ids:
-                                continue
-                            result_frame[mask.astype(bool)] = object_color
-                    writer.write(result_frame)
-
-                writer.release()
-
-                logger.info(f"Segmentation video written to {output_path}")
-                return output_path
-
-        except Exception as exc:
-            logger.error(f"Segmentation failed: {exc}")
-            return None
+"""
 
 
 def get_video_classifier_components():
@@ -582,38 +420,22 @@ async def upload_video(
             )
 
             reward_value = 0.0
-            segmented_path: Optional[str] = None
             classification_target = tmp_path
             analysis_start = time.time()
             try:
-                segmented_path = await asyncio.to_thread(segment_uploaded_video, tmp_path)
-                if segmented_path:
-                    classification_target = segmented_path
-                    logger.info("Segmentation succeeded; using segmented clip for classification")
-                else:
-                    logger.info("Segmentation unavailable; classifying raw clip")
-
+                logger.info("SAM segmentation disabled; classifying raw clip directly")
                 reward_value = await asyncio.to_thread(classify_segmented_video, classification_target)
             except Exception as e:
                 logger.error(f"Video processing pipeline failed: {e}")
                 reward_value = 0.0
             finally:
                 analysis_time = time.time() - analysis_start
-                target_desc = "segmented" if segmented_path else "raw"
                 logger.info(
-                    "Video analysis completed (target=%s): score=%.4f, time=%.2fs",
-                    target_desc,
+                    "Video analysis completed (target=raw): score=%.4f, time=%.2fs",
                     reward_value,
                     analysis_time,
                 )
                 log_video_score(episode_number, total_size, reward_value, analysis_time, attempt_number)
-
-                if segmented_path and os.path.exists(segmented_path):
-                    try:
-                        os.remove(segmented_path)
-                        logger.info(f"Segmented temp file cleaned up: {segmented_path}")
-                    except Exception as cleanup_exc:
-                        logger.warning(f"Failed to clean up segmented file: {cleanup_exc}")
             
             upload_duration = time.time() - start_time
             logger.info(f"Upload processed successfully in {upload_duration:.2f}s")

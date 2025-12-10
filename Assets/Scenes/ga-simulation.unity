@@ -2073,6 +2073,9 @@ MonoBehaviour:
   recordingTailSeconds: 0.5
   serverScoreTimeoutSeconds: 1800
   prioritizeAgentCenter: 1
+  preMoveDelaySeconds: 3
+  enforcedRecordingDurationSeconds: 5
+  enforcedRecordingFrameRate: 15
 --- !u!114 &870610539
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2098,11 +2101,14 @@ MonoBehaviour:
   lockCaptureFramerate: 1
   archiveUploadedVideos: 1
   uploadArchiveSubdirectory: Uploaded
+  consolidateVideosIntoSingleFolder: 1
+  consolidatedVideoSubfolder: Videos
   serverBaseUrl: http://localhost:8000
   serverTimeout: 1800
   maxRetryAttempts: 5
   retryDelay: 2
   enableDetailedLogging: 1
+  uploadToServer: 1
 --- !u!1001 &899462439
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -4606,13 +4612,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c0f15003eaafbb4448bd7829bba2561b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  populationSize: 20
+  populationSize: 10
   eliteCount: 2
-  mutationRate: 0.1
-  mutationStrength: 0.2
+  mutationRate: 0.01
+  mutationStrength: 0.05
   crossoverRate: 0.8
   maxGenerations: 100
   autoRun: 1
+  recordingsPerIndividual: 3
   agentPrefab: {fileID: 4105506564861623119, guid: ed926511b1b6d3d4e9712ee69de6a559,
     type: 3}
   spawnRange: 14
@@ -4634,6 +4641,9 @@ MonoBehaviour:
   csvFileName: ga_progress.csv
   overwriteCsvOnStart: 1
   populationCsvFileName: ga_population.csv
+  resumeFromCsv: 0
+  resumeCsvFileName: 
+  resumeGenerationNumber: 0
 --- !u!4 &2044161436
 Transform:
   m_ObjectHideFlags: 0

@@ -74,6 +74,7 @@ public class VideoRecorder : MonoBehaviour
     private bool lastUploadSuccess = false;
     private int currentGenerationIndex = -1;
     private int currentIndividualIndex = -1;
+    private int currentSampleIndex = -1;
     private string resolvedFfmpegExecutablePath;
 
     private void LogStatus(string message)
@@ -157,17 +158,23 @@ public class VideoRecorder : MonoBehaviour
         }
     }
 
-    public void SetEvaluationContext(int generationIndex, int individualIndex)
+    public void SetEvaluationContext(int generationIndex, int individualIndex, int sampleIndex = -1)
     {
         currentGenerationIndex = generationIndex;
         currentIndividualIndex = individualIndex;
+        currentSampleIndex = sampleIndex;
     }
 
     private string BuildEpisodeBaseName(int episodeNumber)
     {
         if (currentGenerationIndex >= 0 && currentIndividualIndex >= 0)
         {
-            return $"Generation_{currentGenerationIndex + 1:D3}_{currentIndividualIndex + 1:D3}";
+            string baseName = $"Generation_{currentGenerationIndex + 1:D3}_{currentIndividualIndex + 1:D3}";
+            if (currentSampleIndex >= 1)
+            {
+                baseName += $"_Sample_{currentSampleIndex:D2}";
+            }
+            return baseName;
         }
 
         return $"Episode_{episodeNumber:D6}";
@@ -1285,9 +1292,12 @@ public class VideoRecorder : MonoBehaviour
                     if (response != null && response.status == "ok")
                     {
                         lastUploadSuccess = true;
-                        
-                        // Distribute reward to all subscribed agents
-                        BroadcastReward(episodeNumber, response.reward);
+
+                        bool responseHasScoreField = responseText.Contains("\"score\"");
+                        float resolvedReward = responseHasScoreField ? response.score : response.reward;
+
+                        // Distribute reward (score) to all subscribed agents
+                        BroadcastReward(episodeNumber, resolvedReward);
 
                         if (OnRewardReceived == null && OnServerScoreReceived == null)
                         {
@@ -1295,11 +1305,11 @@ public class VideoRecorder : MonoBehaviour
                         }
                         else if (enableDetailedLogging)
                         {
-                            Debug.Log($"[VideoRecorder] Episode {episodeNumber}: Reward {response.reward} distributed to listeners");
+                            Debug.Log($"[VideoRecorder] Episode {episodeNumber}: Reward {resolvedReward} distributed to listeners");
                         }
                         else
                         {
-                            LogStatus($"Episode {episodeNumber} upload succeeded. Reward {response.reward:F3}.");
+                            LogStatus($"Episode {episodeNumber} upload succeeded. Reward {resolvedReward:F3}.");
                         }
                     }
                     else
@@ -1349,6 +1359,7 @@ public class VideoRecorder : MonoBehaviour
         public string status;        // "ok" or error status
         public int episode_number;   // サーバーから返されるエピソード番号
         public float reward;         // 計算された報酬値
+        public float score;          // server_videomae_api 互換: 平均コサイン類似度
     }
 
     private void PersistUploadedVideo(string sourcePath, int episodeNumber)

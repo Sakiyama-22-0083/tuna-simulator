@@ -16,7 +16,6 @@ public class GeneticBoidAgent : MonoBehaviour
     public float separationWeight = 1.0f;      // 分離の重み
     public float alignmentWeight = 1.0f;       // 整列の重み
     public float cohesionWeight = 1.0f;        // 結合の重み
-    public float obstacleAvoidWeight = 2.0f;   // 障害物回避の重み
     public float baseSpeed = 2f;               // 前進速度
     public float separationRadius = 2f;        // 近距離反発半径（InnerRadius）
 
@@ -24,15 +23,15 @@ public class GeneticBoidAgent : MonoBehaviour
     [Tooltip("近傍探索半径（遺伝的アルゴリズムの調整対象外）")]
     public float detectionRadius = 5f;         // 周囲探索半径
 
-    public const int GeneCount = 6;
+    public const int GeneCount = 5;
     public static readonly string[] GeneNames =
     {
-        "Separation", "Alignment", "Cohesion", "Obstacle", "MoveSpeed", "InnerRadius"
+        "Separation", "Alignment", "Cohesion", "MoveSpeed", "SeparationRadius"
     };
 
     // 遺伝子ごとの下限・上限
-    public static readonly float[] GeneMins = { 0f, 0f, 0f, 0f, 0.1f, 0.1f };
-    public static readonly float[] GeneMaxs = { 10f, 10f, 10f, 10f, 10f, 5f };
+    public static readonly float[] GeneMins = { 0f, 0f, 0f, 0.1f, 0.1f };
+    public static readonly float[] GeneMaxs = { 1f, 1f, 1f, 10f, 5f };
 
     public static float ClampGene(int index, float value)
     {
@@ -148,7 +147,6 @@ public class GeneticBoidAgent : MonoBehaviour
             separationWeight,
             alignmentWeight,
             cohesionWeight,
-            obstacleAvoidWeight,
             baseSpeed,
             separationRadius
         };
@@ -169,9 +167,8 @@ public class GeneticBoidAgent : MonoBehaviour
         separationWeight = ClampGene(0, genes[0]);
         alignmentWeight = ClampGene(1, genes[1]);
         cohesionWeight = ClampGene(2, genes[2]);
-        obstacleAvoidWeight = ClampGene(3, genes[3]);
-        baseSpeed = ClampGene(4, genes[4]);
-        separationRadius = ClampGene(5, genes[5]);
+        baseSpeed = ClampGene(3, genes[3]);
+        separationRadius = ClampGene(4, genes[4]);
     }
     #endregion
 
@@ -182,17 +179,17 @@ public class GeneticBoidAgent : MonoBehaviour
         DetectNearbyObjects();
 
         // Boidsアルゴリズムを実行
-        Vector3 separation = CalculateSeparation() * separationWeight;
-
+        Vector3 agentRepulsion = CalculateSeparation();
+        Vector3 obstacleRepulsion = CalculateObstacleAvoidance();
+        Vector3 separation = (agentRepulsion + obstacleRepulsion) * separationWeight;
         Vector3 alignment = CalculateAlignment() * alignmentWeight;
         Vector3 cohesion = CalculateCohesion() * cohesionWeight;
-        Vector3 avoidance = CalculateObstacleAvoidance() * obstacleAvoidWeight;
 
         Vector3 targetDirection = transform.forward;
 
         if (nearbyAgents.Count > 0 || nearbyObstacles.Count > 0)
         {
-            targetDirection = separation + alignment + cohesion + avoidance;
+            targetDirection = separation + alignment + cohesion;
             targetDirection += transform.forward * Mathf.Max(targetDirection.magnitude, 1f) * 0.5f;
         }
 
@@ -271,33 +268,27 @@ public class GeneticBoidAgent : MonoBehaviour
     /// </summary>
     private Vector3 CalculateSeparation()
     {
-        Vector3 force = Vector3.zero;
-        int count = 0;
+        Vector3 accumulated = Vector3.zero;
+        int contributingCount = 0;
 
         var neighbours = GetNearestAgents();
 
         foreach (GeneticBoidAgent agent in neighbours)
         {
-            float distance = Vector3.Distance(transform.position, agent.transform.position);
-            if (distance < separationRadius && distance > 0.001f)
+            if (agent == null)
             {
-                Vector3 diff = transform.position - agent.transform.position;
-                force += diff.normalized / distance;
-                count++;
+                continue;
+            }
+
+            Vector3 offset = transform.position - agent.transform.position;
+            if (TryBuildRepulsion(offset, offset, out Vector3 contribution))
+            {
+                accumulated += contribution;
+                contributingCount++;
             }
         }
 
-        if (count > 0)
-        {
-            force /= count;
-        }
-
-        if (force.sqrMagnitude < 0.0001f)
-        {
-            return Vector3.zero;
-        }
-
-        return force.normalized;
+        return FinalizeRepulsion(accumulated, contributingCount);
     }
 
     /// <summary>
@@ -435,12 +426,15 @@ public class GeneticBoidAgent : MonoBehaviour
     /// </summary>
     private Vector3 CalculateObstacleAvoidance()
     {
-        Vector3 avoidForce = Vector3.zero;
-        int count = 0;
+        Vector3 accumulated = Vector3.zero;
+        int contributingCount = 0;
 
         foreach (Collider obstacle in nearbyObstacles)
         {
-            if (obstacle == null) continue;
+            if (obstacle == null)
+            {
+                continue;
+            }
 
             Vector3 closestPoint;
             if (obstacle is MeshCollider meshCollider && !meshCollider.convex)
@@ -451,27 +445,62 @@ public class GeneticBoidAgent : MonoBehaviour
             {
                 closestPoint = obstacle.ClosestPoint(transform.position);
             }
-            float distance = Vector3.Distance(transform.position, closestPoint);
 
-            if (distance < separationRadius && distance > 0.001f)
+            Vector3 offset = transform.position - closestPoint;
+            Vector3 fallbackDirection = transform.position - obstacle.bounds.center;
+
+            if (TryBuildRepulsion(offset, fallbackDirection, out Vector3 contribution))
             {
-                Vector3 diff = transform.position - closestPoint;
-                avoidForce += diff.normalized / distance;
-                count++;
+                accumulated += contribution;
+                contributingCount++;
             }
         }
 
-        if (count > 0)
+        return FinalizeRepulsion(accumulated, contributingCount);
+    }
+
+    private bool TryBuildRepulsion(Vector3 offset, Vector3 fallbackDirection, out Vector3 contribution)
+    {
+        float distance = offset.magnitude;
+        contribution = Vector3.zero;
+
+        if (distance > separationRadius)
         {
-            avoidForce /= count;
+            return false;
         }
 
-        if (avoidForce.sqrMagnitude < 0.0001f)
+        Vector3 direction;
+        if (distance > Mathf.Epsilon)
         {
-            return Vector3.zero;
+            direction = offset / Mathf.Max(distance, 0.0001f);
+        }
+        else if (fallbackDirection.sqrMagnitude > 0.0001f)
+        {
+            direction = fallbackDirection.normalized;
+        }
+        else
+        {
+            direction = Vector3.zero;
         }
 
-        return avoidForce.normalized;
+        if (direction.sqrMagnitude < 0.0001f)
+        {
+            return false;
+        }
+
+        float strength = separationRadius / Mathf.Max(distance, 0.001f);
+        contribution = direction * strength;
+        return true;
+    }
+
+    private static Vector3 FinalizeRepulsion(Vector3 accumulated, int contributingCount)
+    {
+        if (contributingCount > 0)
+        {
+            accumulated /= contributingCount;
+        }
+
+        return accumulated.sqrMagnitude > 0.0001f ? accumulated.normalized : Vector3.zero;
     }
     #endregion
 

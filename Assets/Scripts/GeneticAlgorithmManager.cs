@@ -16,18 +16,18 @@ public class GeneticAlgorithmManager : MonoBehaviour
     #region GA 設定
     [Header("遺伝的アルゴリズム設定")]
     [Tooltip("個体数（1世代あたりの評価回数）")]
-    public int populationSize = 20;
+    public int populationSize = 10;
 
     [Tooltip("エリート選択数")]
-    public int eliteCount = 2;
+    public int eliteCount = 4;
 
     [Tooltip("突然変異率 [0, 1]")]
     [Range(0f, 1f)]
-    public float mutationRate = 0.1f;
+    public float mutationRate = 0.01f;
 
     [Tooltip("突然変異の強さ [0, 1]")]
     [Range(0f, 1f)]
-    public float mutationStrength = 0.2f;
+    public float mutationStrength = 0.05f;
 
     [Tooltip("交叉率 [0, 1]")]
     [Range(0f, 1f)]
@@ -39,6 +39,10 @@ public class GeneticAlgorithmManager : MonoBehaviour
     [Tooltip("自動実行（1世代終了後に次世代を自動評価）")]
     public bool autoRun = true;
     #endregion
+
+    [Header("評価サンプリング設定")]
+    [SerializeField, Tooltip("同じ遺伝子セットで撮影・評価する回数。各サンプルの最高スコアを適応度として利用します。")]
+    [Min(1)] private int recordingsPerIndividual = 3;
 
     private void LogStatus(string message)
     {
@@ -115,6 +119,8 @@ public class GeneticAlgorithmManager : MonoBehaviour
     private float bestFitness = 0f;
     private float avgFitness = 0f;
     private float[] bestGenes = new float[GeneticBoidAgent.GeneCount];
+    private int samplesCompletedForCurrentIndividual = 0;
+    private float bestScoreForCurrentIndividual = 0f;
 
     private Bounds agentPrefabBounds;
     private bool agentBoundsInitialized = false;
@@ -122,6 +128,8 @@ public class GeneticAlgorithmManager : MonoBehaviour
     private bool csvHeaderWritten = false;
     private string populationCsvFilePath;
     private bool populationCsvHeaderWritten = false;
+
+    private int SamplesPerIndividual => Mathf.Max(1, recordingsPerIndividual);
     #endregion
 
     #region ログ設定
@@ -710,28 +718,21 @@ public class GeneticAlgorithmManager : MonoBehaviour
             videoRecorder = FindObjectOfType<VideoRecorder>();
         }
 
-        videoRecorder?.SetEvaluationContext(currentGeneration, index);
+        samplesCompletedForCurrentIndividual = 0;
+        bestScoreForCurrentIndividual = 0f;
 
-        var genes = individuals[index].Genes;
-
-        ResetAgentTransformsForEvaluation();
-
-        foreach (var agent in simulationAgents)
+        if (!TryStartSampleEvaluation())
         {
-            if (agent == null) continue;
-            agent.SetGenes(genes);
-            agent.ResetFitness();
+            Debug.LogWarning("[GA] VideoRecorder not found. Using local fitness estimate.");
+            HandleSampleStartFailure("VideoRecorder unavailable");
         }
+    }
 
-        OnIndividualEvaluationStarted?.Invoke(currentGeneration, index);
-
-        waitingForServerScore = true;
-        BeginServerScoreTimeoutWatch(index);
-        LogStatus($"Individual {index + 1}/{individuals.Count} applied. Awaiting server score...");
-
-        if (enableDetailedLogging)
+    private bool TryStartSampleEvaluation()
+    {
+        if (currentIndividualIndex < 0 || currentIndividualIndex >= individuals.Count)
         {
-            Debug.Log($"[GA] Generation {currentGeneration}, Individual {index + 1}/{individuals.Count}: genes applied, awaiting server score.");
+            return false;
         }
 
         if (videoRecorder == null)
@@ -739,14 +740,68 @@ public class GeneticAlgorithmManager : MonoBehaviour
             videoRecorder = FindObjectOfType<VideoRecorder>();
             if (videoRecorder == null)
             {
-                Debug.LogWarning("[GA] VideoRecorder not found. Using local fitness estimate.");
-                waitingForServerScore = false;
-                CancelServerScoreTimeoutWatch();
-                individuals[index].Fitness = CalculateFallbackFitness();
-                LogStatus($"Individual {index + 1} fallback fitness = {individuals[index].Fitness:F3}");
-                AdvanceToNextIndividual();
+                return false;
             }
         }
+
+        var genes = individuals[currentIndividualIndex].Genes;
+
+        ResetAgentTransformsForEvaluation();
+
+        foreach (var agent in simulationAgents)
+        {
+            if (agent == null)
+            {
+                continue;
+            }
+
+            agent.SetGenes(genes);
+            agent.ResetFitness();
+        }
+
+        int sampleNumber = samplesCompletedForCurrentIndividual + 1;
+        int totalSamples = SamplesPerIndividual;
+
+        videoRecorder.SetEvaluationContext(currentGeneration, currentIndividualIndex, sampleNumber);
+
+        OnIndividualEvaluationStarted?.Invoke(currentGeneration, currentIndividualIndex);
+
+        waitingForServerScore = true;
+        BeginServerScoreTimeoutWatch(currentIndividualIndex);
+
+        LogStatus($"Individual {currentIndividualIndex + 1}/{individuals.Count}: recording sample {sampleNumber}/{totalSamples}.");
+
+        if (enableDetailedLogging)
+        {
+            Debug.Log($"[GA] Generation {currentGeneration}, Individual {currentIndividualIndex + 1}: sample {sampleNumber}/{totalSamples} underway.");
+        }
+
+        return true;
+    }
+
+    private void HandleSampleStartFailure(string reason)
+    {
+        waitingForServerScore = false;
+        CancelServerScoreTimeoutWatch();
+
+        float resolvedFitness;
+        if (samplesCompletedForCurrentIndividual > 0)
+        {
+            resolvedFitness = bestScoreForCurrentIndividual;
+            LogStatus($"Individual {currentIndividualIndex + 1} kept best score {resolvedFitness:F3} from {samplesCompletedForCurrentIndividual} sample(s) before stop ({reason}).");
+        }
+        else
+        {
+            resolvedFitness = CalculateFallbackFitness();
+            LogStatus($"Individual {currentIndividualIndex + 1} fallback fitness {resolvedFitness:F3} applied ({reason}).");
+        }
+
+        if (currentIndividualIndex >= 0 && currentIndividualIndex < individuals.Count)
+        {
+            individuals[currentIndividualIndex].Fitness = resolvedFitness;
+        }
+
+        AdvanceToNextIndividual();
     }
 
     private float CalculateFallbackFitness()
@@ -769,15 +824,45 @@ public class GeneticAlgorithmManager : MonoBehaviour
 
         waitingForServerScore = false;
         CancelServerScoreTimeoutWatch();
-        float clampedScore = Mathf.Max(0f, score);
-        individuals[currentIndividualIndex].Fitness = clampedScore;
 
+        float clampedScore = Mathf.Max(0f, score);
         LogStatus($"Received server score {clampedScore:F3} for individual {currentIndividualIndex + 1}.");
 
         if (enableDetailedLogging)
         {
             Debug.Log($"[GA] Generation {currentGeneration}, Individual {currentIndividualIndex + 1}: server score = {clampedScore:F4}");
         }
+
+        CompleteSampleEvaluation(clampedScore);
+    }
+
+    private void CompleteSampleEvaluation(float sampleScore)
+    {
+        if (currentIndividualIndex < 0 || currentIndividualIndex >= individuals.Count)
+        {
+            Debug.LogWarning("[GA] Cannot complete sample: individual index out of range.");
+            return;
+        }
+
+        sampleScore = Mathf.Max(0f, sampleScore);
+        bestScoreForCurrentIndividual = Mathf.Max(bestScoreForCurrentIndividual, sampleScore);
+        samplesCompletedForCurrentIndividual++;
+
+        int totalSamples = SamplesPerIndividual;
+        LogStatus($"Sample {samplesCompletedForCurrentIndividual}/{totalSamples} for individual {currentIndividualIndex + 1} scored {sampleScore:F3}.");
+
+        if (samplesCompletedForCurrentIndividual < totalSamples)
+        {
+            if (!TryStartSampleEvaluation())
+            {
+                HandleSampleStartFailure("VideoRecorder unavailable before next sample");
+            }
+            return;
+        }
+
+        float resolvedScore = bestScoreForCurrentIndividual;
+        individuals[currentIndividualIndex].Fitness = resolvedScore;
+        LogStatus($"Individual {currentIndividualIndex + 1} best score {resolvedScore:F3} across {totalSamples} samples.");
 
         AdvanceToNextIndividual();
     }
@@ -1330,6 +1415,8 @@ public class GeneticAlgorithmManager : MonoBehaviour
         CancelServerScoreTimeoutWatch();
         pendingEvaluationStart = false;
         hasLoggedServerWait = false;
+        samplesCompletedForCurrentIndividual = 0;
+        bestScoreForCurrentIndividual = 0f;
         InitializePopulationGenes();
         InitializeCsvLogging();
         ResetAgentTransformsForEvaluation();
@@ -1383,13 +1470,13 @@ public class GeneticAlgorithmManager : MonoBehaviour
         }
 
         waitingForServerScore = false;
+        CancelServerScoreTimeoutWatch();
+
         float fallbackFitness = CalculateFallbackFitness();
-        individuals[currentIndividualIndex].Fitness = fallbackFitness;
+        Debug.LogWarning($"[GA] Timed out waiting for server score after {serverScoreTimeoutSeconds:F1}s at individual {currentIndividualIndex + 1}. Applying fallback sample score {fallbackFitness:F3}.");
+        LogStatus($"Timeout fallback score {fallbackFitness:F3} used for individual {currentIndividualIndex + 1}.");
 
-        Debug.LogWarning($"[GA] Timed out waiting for server score after {serverScoreTimeoutSeconds:F1}s at individual {currentIndividualIndex + 1}. Using fallback fitness {fallbackFitness:F3}.");
-        LogStatus($"Timeout fallback fitness {fallbackFitness:F3} applied to individual {currentIndividualIndex + 1}.");
-
-        AdvanceToNextIndividual();
+        CompleteSampleEvaluation(fallbackFitness);
     }
     #endregion
 

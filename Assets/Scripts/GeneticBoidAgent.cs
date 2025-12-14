@@ -18,20 +18,21 @@ public class GeneticBoidAgent : MonoBehaviour
     public float cohesionWeight = 1.0f;        // 結合の重み
     public float baseSpeed = 2f;               // 前進速度
     public float separationRadius = 2f;        // 近距離反発半径（InnerRadius）
+    public float fogDensity = 0.01f;           // フォグ密度
 
     [Header("固定設定")]
     [Tooltip("近傍探索半径（遺伝的アルゴリズムの調整対象外）")]
     public float detectionRadius = 5f;         // 周囲探索半径
 
-    public const int GeneCount = 5;
+    public const int GeneCount = 6;
     public static readonly string[] GeneNames =
     {
-        "Separation", "Alignment", "Cohesion", "MoveSpeed", "SeparationRadius"
+        "Separation", "Alignment", "Cohesion", "MoveSpeed", "SeparationRadius", "FogDensity"
     };
 
     // 遺伝子ごとの下限・上限
-    public static readonly float[] GeneMins = { 0f, 0f, 0f, 0.1f, 0.1f };
-    public static readonly float[] GeneMaxs = { 1f, 1f, 1f, 10f, 5f };
+    public static readonly float[] GeneMins = { 0f, 0f, 0f, 0.1f, 0.1f, 0};
+    public static readonly float[] GeneMaxs = { 1f, 1f, 1f, 10f, 5f, 1f };
 
     public static float ClampGene(int index, float value)
     {
@@ -148,7 +149,8 @@ public class GeneticBoidAgent : MonoBehaviour
             alignmentWeight,
             cohesionWeight,
             baseSpeed,
-            separationRadius
+            separationRadius,
+            fogDensity
         };
     }
 
@@ -169,6 +171,7 @@ public class GeneticBoidAgent : MonoBehaviour
         cohesionWeight = ClampGene(2, genes[2]);
         baseSpeed = ClampGene(3, genes[3]);
         separationRadius = ClampGene(4, genes[4]);
+        fogDensity = ClampGene(5, genes[5]);
     }
     #endregion
 

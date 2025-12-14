@@ -4,6 +4,7 @@ import os
 import tempfile
 import threading
 import time
+import cv2
 from typing import Dict, List
 
 import numpy as np
@@ -18,7 +19,7 @@ from transformers import VideoMAEImageProcessor, VideoMAEModel
 # --------------------------------------------------------------------------------------
 REAL_VIDEO_DIR = os.getenv(
     "REAL_VIDEO_DATASET_DIR",
-    "real_video_dataset",
+    "grayscale_real_video_dataset",
 )
 MODEL_NAME = os.getenv("VIDEOMAE_MODEL_NAME", "MCG-NJU/videomae-base")
 NUM_FRAMES = int(os.getenv("VIDEOMAE_FRAME_COUNT", "16"))
@@ -83,6 +84,8 @@ def video_to_vector(video_path: str) -> torch.Tensor:
     assert _processor is not None and _model is not None and _device is not None
 
     frames = load_video_frames(video_path, NUM_FRAMES)
+    frames = grayscale_opencv(frames)
+
     inputs = _processor(list(frames), return_tensors="pt")
     inputs = {k: v.to(_device) for k, v in inputs.items()}
 
@@ -124,6 +127,32 @@ def ensure_real_vectors() -> Dict[str, torch.Tensor]:
         _dataset_signature = signature
         return _dataset_vectors
 
+def grayscale_opencv(frames: np.ndarray) -> np.ndarray:
+    """
+    frames: (T, 3, H, W) RGB
+    return: (T, 3, H, W) grayscale (OpenCV方式)
+    """
+    gray_frames = []
+
+    for frame in frames:
+        # (C, H, W) → (H, W, C)
+        frame_hwc = frame.transpose(1, 2, 0)
+
+        # RGB → BGR（OpenCV用）
+        frame_bgr = cv2.cvtColor(frame_hwc, cv2.COLOR_RGB2BGR)
+
+        # BGR → Gray（あなたのコードと完全一致）
+        gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+
+        # 1ch → 3ch
+        gray_3ch = np.stack([gray, gray, gray], axis=-1)
+
+        # (H, W, C) → (C, H, W)
+        gray_chw = gray_3ch.transpose(2, 0, 1)
+
+        gray_frames.append(gray_chw)
+
+    return np.stack(gray_frames, axis=0).astype(frames.dtype)
 
 # --------------------------------------------------------------------------------------
 # FastAPI setup

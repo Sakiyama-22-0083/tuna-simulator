@@ -19,7 +19,7 @@ public class GeneticAlgorithmManager : MonoBehaviour
     public int populationSize = 10;
 
     [Tooltip("エリート選択数")]
-    public int eliteCount = 4;
+    public int eliteCount = 2;
 
     [Tooltip("突然変異率 [0, 1]")]
     [Range(0f, 1f)]
@@ -64,13 +64,20 @@ public class GeneticAlgorithmManager : MonoBehaviour
     [Min(1)] public int agentsPerEvaluation = 100;
 
     [Tooltip("スポーン位置を決める際の最大試行回数")]
-    public int spawnMaxAttempts = 64;
+    public int spawnMaxAttempts = 100;
 
     [Tooltip("スポーン時の衝突判定に使用するレイヤーマスク（0 で判定しない）")]
     public LayerMask spawnCollisionMask = Physics.DefaultRaycastLayers;
 
     [Tooltip("Collider を取得できない場合に使用する半径（メートル）")]
     public float spawnFallbackRadius = 1.5f;
+    #endregion
+
+    #region フォグ設定
+    [Header("フォグカラー設定")]
+    public float r = 0.15f;
+    public float g = 0.4f;
+    public float b = 0.55f;
     #endregion
 
     #region 外部連携
@@ -748,6 +755,13 @@ public class GeneticAlgorithmManager : MonoBehaviour
 
         ResetAgentTransformsForEvaluation();
 
+        // フォグ設定を適用
+        if (genes.Length >= 6)
+        {
+            RenderSettings.fogDensity = genes[5];
+            RenderSettings.fogColor = new Color(r, g, b);
+        }
+
         foreach (var agent in simulationAgents)
         {
             if (agent == null)
@@ -938,12 +952,10 @@ public class GeneticAlgorithmManager : MonoBehaviour
             });
         }
 
-        float totalFitness = Mathf.Max(0.0001f, ordered.Sum(ind => Mathf.Max(0f, ind.Fitness)));
-
         while (newPopulation.Count < populationSize)
         {
-            var parent1 = SelectParent(totalFitness);
-            var parent2 = SelectParent(totalFitness);
+            var parent1 = SelectParentByRank(ordered);
+            var parent2 = SelectParentByRank(ordered);
 
             var (childGenes1, childGenes2) = PerformCrossover(parent1.Genes, parent2.Genes);
 
@@ -960,25 +972,30 @@ public class GeneticAlgorithmManager : MonoBehaviour
         return newPopulation;
     }
 
-    private Individual SelectParent(float totalFitness)
+    private Individual SelectParentByRank(List<Individual> ordered)
     {
-        if (totalFitness <= 0f)
+        if (ordered == null || ordered.Count == 0)
         {
             return individuals[Random.Range(0, individuals.Count)];
         }
 
-        float pick = Random.Range(0f, totalFitness);
-        float cumulative = 0f;
-        foreach (var individual in individuals)
+        int count = ordered.Count;
+        // Linear rank weights: best individual weight = count, worst = 1
+        int totalWeight = (count * (count + 1)) / 2;
+        int pickValue = Random.Range(0, totalWeight);
+        int cumulative = 0;
+
+        for (int i = 0; i < count; i++)
         {
-            cumulative += Mathf.Max(0f, individual.Fitness);
-            if (cumulative >= pick)
+            int weight = count - i;
+            cumulative += weight;
+            if (pickValue < cumulative)
             {
-                return individual;
+                return ordered[i];
             }
         }
 
-        return individuals[^1];
+        return ordered[^1];
     }
 
     private (float[], float[]) PerformCrossover(float[] parent1, float[] parent2)

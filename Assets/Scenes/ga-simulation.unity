@@ -15,9 +15,9 @@ RenderSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 9
   m_Fog: 1
-  m_FogColor: {r: 0.0983001, g: 0.34022316, b: 0.4433962, a: 1}
+  m_FogColor: {r: 0.17590779, g: 0.39215687, b: 0.54901963, a: 1}
   m_FogMode: 2
-  m_FogDensity: 0.3
+  m_FogDensity: 0.7
   m_LinearFogStart: 0
   m_LinearFogEnd: 300
   m_AmbientSkyColor: {r: 0.212, g: 0.227, b: 0.259, a: 1}
@@ -1553,7 +1553,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!108 &756429713
 Light:
   m_ObjectHideFlags: 0
@@ -2096,10 +2096,10 @@ MonoBehaviour:
   recordingHeight: 1080
   autoEncodeToMp4: 1
   ffmpegExePath: ffmpeg
-  deleteFramesAfterEncode: 0
+  deleteFramesAfterEncode: 1
   overwriteExistingRecordings: 0
   lockCaptureFramerate: 1
-  archiveUploadedVideos: 1
+  archiveUploadedVideos: 0
   uploadArchiveSubdirectory: Uploaded
   consolidateVideosIntoSingleFolder: 1
   consolidatedVideoSubfolder: Videos
@@ -4612,24 +4612,27 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c0f15003eaafbb4448bd7829bba2561b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  populationSize: 10
-  eliteCount: 2
+  populationSize: 20
+  eliteCount: 0
   mutationRate: 0.01
   mutationStrength: 0.05
   crossoverRate: 0.8
   maxGenerations: 100
   autoRun: 1
-  recordingsPerIndividual: 3
+  recordingsPerIndividual: 10
   agentPrefab: {fileID: 4105506564861623119, guid: ed926511b1b6d3d4e9712ee69de6a559,
     type: 3}
   spawnRange: 14
   spawnHeight: 14
   agentsPerEvaluation: 80
-  spawnMaxAttempts: 64
+  spawnMaxAttempts: 100
   spawnCollisionMask:
     serializedVersion: 2
     m_Bits: 4294967291
   spawnFallbackRadius: 1.5
+  r: 0.15
+  g: 0.4
+  b: 0.55
   videoRecorder: {fileID: 870610539}
   serverScoreTimeoutSeconds: 1800
   serverHealthUrl: http://127.0.0.1:8000/health
@@ -4642,7 +4645,7 @@ MonoBehaviour:
   overwriteCsvOnStart: 1
   populationCsvFileName: ga_population.csv
   resumeFromCsv: 0
-  resumeCsvFileName: 
+  resumeCsvFileName: ga_population.csv
   resumeGenerationNumber: 0
 --- !u!4 &2044161436
 Transform:

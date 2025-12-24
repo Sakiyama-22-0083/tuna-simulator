@@ -4644,7 +4644,7 @@ MonoBehaviour:
   csvFileName: ga_progress.csv
   overwriteCsvOnStart: 1
   populationCsvFileName: ga_population.csv
-  resumeFromCsv: 0
+  resumeFromCsv: 1
   resumeCsvFileName: ga_population.csv
   resumeGenerationNumber: 0
 --- !u!4 &2044161436

@@ -23,7 +23,7 @@ public class GeneticAlgorithmManager : MonoBehaviour
 
     [Tooltip("突然変異率 [0, 1]")]
     [Range(0f, 1f)]
-    public float mutationRate = 0.01f;
+    public float mutationRate = 0.6f;
 
     [Tooltip("突然変異の強さ [0, 1]")]
     [Range(0f, 1f)]
@@ -74,6 +74,9 @@ public class GeneticAlgorithmManager : MonoBehaviour
     #endregion
 
     #region フォグ設定
+    [Header("フォグ設定")]
+    [SerializeField, Tooltip("フォグ密度（固定値、GA調整対象外）")]
+    public float fogDensity = 0.01f;
     [Header("フォグカラー設定")]
     public float r = 0.15f;
     public float g = 0.4f;
@@ -755,12 +758,9 @@ public class GeneticAlgorithmManager : MonoBehaviour
 
         ResetAgentTransformsForEvaluation();
 
-        // フォグ設定を適用
-        if (genes.Length >= 6)
-        {
-            RenderSettings.fogDensity = genes[5];
-            RenderSettings.fogColor = new Color(r, g, b);
-        }
+        // フォグ設定を適用（固定値）
+        RenderSettings.fogDensity = fogDensity;
+        RenderSettings.fogColor = new Color(r, g, b);
 
         foreach (var agent in simulationAgents)
         {

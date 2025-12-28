@@ -14,10 +14,10 @@ OcclusionCullingSettings:
 RenderSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 9
-  m_Fog: 0
+  m_Fog: 1
   m_FogColor: {r: 0.17590779, g: 0.39215687, b: 0.54901963, a: 1}
   m_FogMode: 2
-  m_FogDensity: 0.5
+  m_FogDensity: 0
   m_LinearFogStart: 0
   m_LinearFogEnd: 300
   m_AmbientSkyColor: {r: 0.212, g: 0.227, b: 0.259, a: 1}
@@ -4612,7 +4612,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c0f15003eaafbb4448bd7829bba2561b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  populationSize: 20
+  populationSize: 30
   eliteCount: 0
   mutationRate: 0.01
   mutationStrength: 0.05

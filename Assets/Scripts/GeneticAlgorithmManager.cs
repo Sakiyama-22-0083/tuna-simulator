@@ -1107,7 +1107,7 @@ public class GeneticAlgorithmManager : MonoBehaviour
 
         try
         {
-            var generationRows = new Dictionary<int, List<(int index, float[] genes)>>();
+            var generationRows = new Dictionary<int, List<(int index, float[] genes, float fitness)>>();
             using StreamReader reader = new StreamReader(fullPath, Encoding.UTF8);
             bool headerSkipped = false;
 
@@ -1156,13 +1156,22 @@ public class GeneticAlgorithmManager : MonoBehaviour
                     genes[geneIndex] = GeneticBoidAgent.ClampGene(geneIndex, parsedValue);
                 }
 
+                // Fitnessカラムを読み取り
+                float fitness = 0f;
+                int fitnessColumnIndex = 2 + GeneticBoidAgent.GeneCount;
+                if (fitnessColumnIndex < columns.Length &&
+                    float.TryParse(columns[fitnessColumnIndex].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out float parsedFitness))
+                {
+                    fitness = parsedFitness;
+                }
+
                 if (!generationRows.TryGetValue(generationNumber, out var list))
                 {
-                    list = new List<(int, float[])>();
+                    list = new List<(int, float[], float)>();
                     generationRows[generationNumber] = list;
                 }
 
-                list.Add((individualNumber, genes));
+                list.Add((individualNumber, genes, fitness));
             }
 
             if (generationRows.Count == 0)
@@ -1190,24 +1199,41 @@ public class GeneticAlgorithmManager : MonoBehaviour
             var restoredPopulation = new List<Individual>(populationSize);
             for (int i = 0; i < populationSize; i++)
             {
-                float[] sourceGenes = i < orderedRows.Count ? orderedRows[i].genes : GeneticBoidAgent.GenerateRandomGenes();
-                restoredPopulation.Add(new Individual
+                if (i < orderedRows.Count)
                 {
-                    Genes = CloneGenes(sourceGenes),
-                    Fitness = 0f
-                });
+                    restoredPopulation.Add(new Individual
+                    {
+                        Genes = CloneGenes(orderedRows[i].genes),
+                        Fitness = orderedRows[i].fitness
+                    });
+                }
+                else
+                {
+                    restoredPopulation.Add(new Individual
+                    {
+                        Genes = GeneticBoidAgent.GenerateRandomGenes(),
+                        Fitness = 0f
+                    });
+                }
             }
 
             individuals.Clear();
             individuals.AddRange(restoredPopulation);
-            currentGeneration = Mathf.Max(0, targetGeneration - 1);
+
+            // 読み込んだ世代の結果を親として次世代を生成
+            currentGeneration = targetGeneration;
+            CalculateStatistics();
+            var nextPopulation = CreateNextGeneration();
+            individuals.Clear();
+            individuals.AddRange(nextPopulation);
+
             if (overwriteCsvOnStart)
             {
                 Debug.LogWarning("[GA] CSV resume enabled. Existing CSV logs will be appended instead of overwritten to preserve history.");
                 overwriteCsvOnStart = false;
             }
 
-            LogStatus($"Population restored from CSV '{fileName}' (generation {targetGeneration}).");
+            LogStatus($"Population restored from CSV '{fileName}' (generation {targetGeneration}). Starting evaluation from generation {currentGeneration + 1}.");
             return true;
         }
         catch (System.Exception ex)

@@ -14,7 +14,7 @@ OcclusionCullingSettings:
 RenderSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 9
-  m_Fog: 1
+  m_Fog: 0
   m_FogColor: {r: 0.17590779, g: 0.39215687, b: 0.54901963, a: 1}
   m_FogMode: 2
   m_FogDensity: 0.5
@@ -4620,7 +4620,7 @@ MonoBehaviour:
   maxGenerations: 100
   autoRun: 1
   recordingsPerIndividual: 10
-  agentPrefab: {fileID: 4105506564861623119, guid: ed926511b1b6d3d4e9712ee69de6a559,
+  agentPrefab: {fileID: 627803851687001208, guid: 7e83763f25bb9f74e8b81b20fa2c007b,
     type: 3}
   spawnRange: 14
   spawnHeight: 14

@@ -1,36 +1,24 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// 遺伝的アルゴリズムによってBoidsパラメータを最適化するエージェント
-/// 各個体は複数の連続値遺伝子（重み・速度・半径など）を持ち、適応度に基づいて進化する
-/// </summary>
 public class GeneticBoidAgent : MonoBehaviour
 {
-    #region コンポーネント参照
     private Rigidbody rBody;
-    #endregion
 
-    #region 遺伝子（最適化対象パラメータ）
-    [Header("遺伝子（Boidsパラメータ）")]
-    public float separationWeight = 1.0f;      // 分離の重み
-    public float alignmentWeight = 1.0f;       // 整列の重み
-    public float cohesionWeight = 1.0f;        // 結合の重み
-    public float baseSpeed = 2f;               // 前進速度
-    public float separationRadius = 2f;        // 近距離反発半径（InnerRadius）
+    public float separationWeight = 1f;     // 分離の重み
+    public float alignmentWeight = 1f;      // 整列の重み
+    public float cohesionWeight = 1f;       // 結合の重み
+    public float baseSpeed = 10f;           // 前進速度
+    public float separationRadius = 5f;     // 近距離反発半径
 
-    [Header("固定設定")]
-    [Tooltip("近傍探索半径（遺伝的アルゴリズムの調整対象外）")]
-    public float detectionRadius = 5f;         // 周囲探索半径
-
+    public float detectionRadius = 8f;
     public const int GeneCount = 5;
     public static readonly string[] GeneNames =
     {
         "Separation", "Alignment", "Cohesion", "MoveSpeed", "SeparationRadius"
     };
 
-    // 遺伝子ごとの下限・上限
-    public static readonly float[] GeneMins = { 0f, 0f, 0f, 0.1f, 0.1f };
+    public static readonly float[] GeneMins = { 0f, 0f, 0f, 0f, 0f };
     public static readonly float[] GeneMaxs = { 1f, 1f, 1f, 10f, 5f };
 
     public static float ClampGene(int index, float value)
@@ -42,23 +30,15 @@ public class GeneticBoidAgent : MonoBehaviour
     {
         return Random.Range(GeneMins[index], GeneMaxs[index]);
     }
-    #endregion
 
-    #region Boidsパラメータ（固定）
-    [Header("Boidsパラメータ設定")]
-    [Tooltip("最大回転速度")]
     public float maxRotationSpeed = 2f;
-    #endregion
 
-    #region 検出・判定設定
-    [Header("検出設定")]
     public LayerMask agentLayer;
     public LayerMask obstacleLayer;
 
-    [SerializeField, Tooltip("非割り当てメモリアロケーションなしで検出に使用するバッファのサイズ。最大検出数に合わせて調整してください。")]
+    [SerializeField]
     [Min(8)] private int detectionBufferCapacity = 128;
 
-    [Header("近傍選択設定")]
     [SerializeField, Min(1)] private int maxAgentsConsidered = 10;
 
     private readonly List<GeneticBoidAgent> nearbyAgents = new();
@@ -68,20 +48,14 @@ public class GeneticBoidAgent : MonoBehaviour
     private Collider[] obstacleColliderBuffer;
     private bool agentBufferOverflowLogged;
     private bool obstacleBufferOverflowLogged;
-    #endregion
 
-    #region 適応度評価
-    [Header("適応度評価")]
     public float fitness = 0f;
     
-    private float totalGroupCohesion = 0f;      // 群れのまとまり度
-    private float totalSmoothness = 0f;         // 動きの滑らかさ
-    private int collisionCount = 0;             // 衝突回数
-    private float totalSpeed = 0f;              // 累積速度
-    private int evaluationSteps = 0;            // 評価ステップ数
-    #endregion
+    private float totalGroupCohesion = 0f;
+    private float totalSmoothness = 0f;
+    private float totalSpeed = 0f;
+    private int evaluationSteps = 0;
 
-    #region 初期化
     private void Awake()
     {
         EnsureRigidbody();
@@ -99,24 +73,8 @@ public class GeneticBoidAgent : MonoBehaviour
         {
             rBody = GetComponent<Rigidbody>();
         }
-
-        if (rBody == null)
-        {
-            Debug.LogError("[GeneticBoidAgent] Rigidbody component is required.", this);
-        }
     }
 
-    private void OnValidate()
-    {
-        if (detectionBufferCapacity < maxAgentsConsidered)
-        {
-            detectionBufferCapacity = maxAgentsConsidered;
-        }
-    }
-
-    /// <summary>
-    /// 遺伝子をランダム初期化
-    /// </summary>
     public void RandomizeGenes()
     {
         var genes = GenerateRandomGenes();
@@ -128,11 +86,7 @@ public class GeneticBoidAgent : MonoBehaviour
     /// </summary>
     public void SetGenes(float[] genes)
     {
-        if (genes == null || genes.Length != GeneCount)
-        {
-            Debug.LogWarning("[GeneticBoidAgent] Invalid gene array supplied.");
-            return;
-        }
+        if (genes == null || genes.Length != GeneCount) return;
 
         ApplyGeneValues(genes);
     }
@@ -170,15 +124,11 @@ public class GeneticBoidAgent : MonoBehaviour
         baseSpeed = ClampGene(3, genes[3]);
         separationRadius = ClampGene(4, genes[4]);
     }
-    #endregion
 
-    #region 物理更新
     void FixedUpdate()
     {
-        // 近くのオブジェクトを検出
         DetectNearbyObjects();
 
-        // Boidsアルゴリズムを実行
         Vector3 agentRepulsion = CalculateSeparation();
         Vector3 obstacleRepulsion = CalculateObstacleAvoidance();
         Vector3 separation = (agentRepulsion + obstacleRepulsion) * separationWeight;
@@ -190,7 +140,6 @@ public class GeneticBoidAgent : MonoBehaviour
         if (nearbyAgents.Count > 0 || nearbyObstacles.Count > 0)
         {
             targetDirection = separation + alignment + cohesion;
-            targetDirection += transform.forward * Mathf.Max(targetDirection.magnitude, 1f) * 0.5f;
         }
 
         targetDirection.y = 0f;
@@ -209,16 +158,8 @@ public class GeneticBoidAgent : MonoBehaviour
         }
 
         rBody.velocity = transform.forward * baseSpeed;
-
-        // 適応度を評価
-        // EvaluateFitness();
     }
-    #endregion
 
-    #region Boidsアルゴリズム実装
-    /// <summary>
-    /// 近くのオブジェクトを検出
-    /// </summary>
     private void DetectNearbyObjects()
     {
         nearbyAgents.Clear();
@@ -228,8 +169,7 @@ public class GeneticBoidAgent : MonoBehaviour
         int agentHits = Physics.OverlapSphereNonAlloc(transform.position, detectionRadius, agentColliderBuffer, agentLayer, QueryTriggerInteraction.Ignore);
         if (agentHits >= agentColliderBuffer.Length && !agentBufferOverflowLogged)
         {
-            Debug.LogWarning($"[GeneticBoidAgent] Agent detection buffer ({agentColliderBuffer.Length}) saturated. Increase detectionBufferCapacity to capture all neighbors.");
-            agentBufferOverflowLogged = true;
+           agentBufferOverflowLogged = true;
         }
 
         for (int i = 0; i < agentHits && i < agentColliderBuffer.Length; i++)
@@ -249,8 +189,7 @@ public class GeneticBoidAgent : MonoBehaviour
         int obstacleHits = Physics.OverlapSphereNonAlloc(transform.position, detectionRadius, obstacleColliderBuffer, obstacleLayer, QueryTriggerInteraction.Ignore);
         if (obstacleHits >= obstacleColliderBuffer.Length && !obstacleBufferOverflowLogged)
         {
-            Debug.LogWarning($"[GeneticBoidAgent] Obstacle detection buffer ({obstacleColliderBuffer.Length}) saturated. Increase detectionBufferCapacity to capture all obstacles.");
-            obstacleBufferOverflowLogged = true;
+           obstacleBufferOverflowLogged = true;
         }
 
         for (int i = 0; i < obstacleHits && i < obstacleColliderBuffer.Length; i++)
@@ -275,10 +214,7 @@ public class GeneticBoidAgent : MonoBehaviour
 
         foreach (GeneticBoidAgent agent in neighbours)
         {
-            if (agent == null)
-            {
-                continue;
-            }
+            if (agent == null) continue;
 
             Vector3 offset = transform.position - agent.transform.position;
             if (TryBuildRepulsion(offset, offset, out Vector3 contribution))
@@ -308,10 +244,7 @@ public class GeneticBoidAgent : MonoBehaviour
 
         foreach (GeneticBoidAgent agent in neighbours)
         {
-            if (agent == null || agent.rBody == null)
-            {
-                continue;
-            }
+            if (agent == null || agent.rBody == null) continue;
 
             avgVelocity += agent.rBody.velocity;
             count++;
@@ -421,9 +354,6 @@ public class GeneticBoidAgent : MonoBehaviour
         return Vector3.zero;
     }
 
-    /// <summary>
-    /// 障害物回避
-    /// </summary>
     private Vector3 CalculateObstacleAvoidance()
     {
         Vector3 accumulated = Vector3.zero;
@@ -502,68 +432,15 @@ public class GeneticBoidAgent : MonoBehaviour
 
         return accumulated.sqrMagnitude > 0.0001f ? accumulated.normalized : Vector3.zero;
     }
-    #endregion
 
-    #region 適応度評価
-    /// <summary>
-    /// 適応度をリセット
-    /// </summary>
     public void ResetFitness()
     {
         fitness = 0f;
         totalGroupCohesion = 0f;
         totalSmoothness = 0f;
-        collisionCount = 0;
         totalSpeed = 0f;
         evaluationSteps = 0;
     }
-
-    /// <summary>
-    /// 各ステップで適応度を評価
-    /// </summary>
-    // private void EvaluateFitness()
-    // {
-    //     evaluationSteps++;
-
-    //     // 1. 群れのまとまり度（近くにいるエージェントの数）
-    //     float cohesionScore = nearbyAgents.Count / 10f; // 最大10体を理想とする
-    //     cohesionScore = Mathf.Min(cohesionScore, 1f);
-    //     totalGroupCohesion += cohesionScore;
-
-    //     // 2. 動きの滑らかさ（角速度が小さいほど良い）
-    //     float smoothness = 1f - Mathf.Min(rBody.angularVelocity.magnitude / 5f, 1f);
-    //     totalSmoothness += smoothness;
-
-    //     // 3. 速度の安定性
-    //     float speedStability = 1f - Mathf.Abs(rBody.velocity.magnitude - baseSpeed) / baseSpeed;
-    //     speedStability = Mathf.Max(speedStability, 0f);
-    //     totalSpeed += speedStability;
-
-    //     // 適応度を計算（各指標の平均）
-    //     if (evaluationSteps > 0)
-    //     {
-    //         float avgCohesion = totalGroupCohesion / evaluationSteps;
-    //         float avgSmoothness = totalSmoothness / evaluationSteps;
-    //         float avgSpeed = totalSpeed / evaluationSteps;
-    //         float collisionPenalty = collisionCount * 0.1f;
-
-    //         fitness = (avgCohesion * 0.4f + avgSmoothness * 0.3f + avgSpeed * 0.3f) - collisionPenalty;
-    //         fitness = Mathf.Max(fitness, 0f);
-    //     }
-    // }
-
-    /// <summary>
-    /// 衝突検出
-    /// </summary>
-    private void OnCollisionEnter(Collision collision)
-    {
-        // 障害物との衝突をカウント
-        if (((1 << collision.gameObject.layer) & obstacleLayer) != 0)
-        {
-            collisionCount++;
-        }
-    }
-    #endregion
 
     private void EnsureDetectionBuffers()
     {
@@ -601,10 +478,6 @@ public class GeneticBoidAgent : MonoBehaviour
         transform.SetPositionAndRotation(worldPosition, worldRotation);
     }
 
-    #region 位置リセット
-    /// <summary>
-    /// エージェントの位置と速度をリセット
-    /// </summary>
     public void ResetPosition()
     {
         EnsureRigidbody();
@@ -622,5 +495,4 @@ public class GeneticBoidAgent : MonoBehaviour
             Random.Range(-10f, 10f)
         );
     }
-    #endregion
 }

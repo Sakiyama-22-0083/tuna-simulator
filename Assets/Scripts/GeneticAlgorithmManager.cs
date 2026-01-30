@@ -7,103 +7,55 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
 
-/// <summary>
-/// 遺伝的アルゴリズムを用いて Boids パラメータを最適化するマネージャ。
-/// 各個体の遺伝子セットを順番に適用し、10 秒動画の server スコアを適応度として利用する。
-/// </summary>
 public class GeneticAlgorithmManager : MonoBehaviour
 {
-    #region GA 設定
-    [Header("遺伝的アルゴリズム設定")]
-    [Tooltip("個体数（1世代あたりの評価回数）")]
-    public int populationSize = 10;
+    public int populationSize = 20;
 
-    [Tooltip("エリート選択数")]
-    public int eliteCount = 2;
-
-    [Tooltip("突然変異率 [0, 1]")]
-    [Range(0f, 1f)]
-    public float mutationRate = 0.6f;
-
-    [Tooltip("突然変異の強さ [0, 1]")]
-    [Range(0f, 1f)]
-    public float mutationStrength = 0.05f;
-
-    [Tooltip("交叉率 [0, 1]")]
-    [Range(0f, 1f)]
+    public float mutationRate = 0.5f;
+    public float mutationStrength = 0.1f;
     public float crossoverRate = 0.8f;
 
-    [Tooltip("最大世代数（0で無限）")]
     public int maxGenerations = 100;
 
-    [Tooltip("自動実行（1世代終了後に次世代を自動評価）")]
     public bool autoRun = true;
-    #endregion
 
-    [Header("評価サンプリング設定")]
-    [SerializeField, Tooltip("同じ遺伝子セットで撮影・評価する回数。各サンプルの最高スコアを適応度として利用します。")]
-    [Min(1)] private int recordingsPerIndividual = 3;
+    [SerializeField] private int recordingsPerIndividual = 5;
 
-    private void LogStatus(string message)
-    {
-        Debug.Log($"[GA] {message}");
-    }
-
-    #region シミュレーション設定
-    [Header("シミュレーション設定")]
-    [Tooltip("GeneticBoidAgent のプレハブ（評価に用いる Boids 群れ）")]
     public GameObject agentPrefab;
 
-    [Tooltip("初期配置時の半径（Transform 原点を中心としたランダム分布）")]
     public float spawnRange = 10f;
 
-    [Tooltip("初期配置時の最大高さ（ローカル Y 範囲）")]
     public float spawnHeight = 5f;
 
-    [Tooltip("各個体の評価に同時使用するエージェント数")]
     [Min(1)] public int agentsPerEvaluation = 100;
 
-    [Tooltip("スポーン位置を決める際の最大試行回数")]
     public int spawnMaxAttempts = 100;
 
-    [Tooltip("スポーン時の衝突判定に使用するレイヤーマスク（0 で判定しない）")]
     public LayerMask spawnCollisionMask = Physics.DefaultRaycastLayers;
 
-    [Tooltip("Collider を取得できない場合に使用する半径（メートル）")]
     public float spawnFallbackRadius = 1.5f;
-    #endregion
 
-    #region フォグ設定
-    [Header("フォグ設定")]
-    [SerializeField, Tooltip("フォグ密度（固定値、GA調整対象外）")]
+    [SerializeField]
     public float fogDensity = 0.01f;
-    [Header("フォグカラー設定")]
     public float r = 0.15f;
     public float g = 0.4f;
     public float b = 0.55f;
-    #endregion
 
-    #region 外部連携
-    [Header("外部連携")]
-    [SerializeField, Tooltip("動画録画・アップロードを担当する VideoRecorder。未指定の場合はシーンから検索する。")]
+    [SerializeField]
     private VideoRecorder videoRecorder;
 
-    [Header("評価待機設定")]
-    [SerializeField, Tooltip("サーバーのスコア応答を待機する最大秒数。0以下で無制限に待つ。")]
+    [SerializeField]
     private float serverScoreTimeoutSeconds = 1800f;
 
-    [Header("サーバー接続設定")]
-    [SerializeField, Tooltip("サーバーのヘルスチェック先 URL。HTTP 200 応答で接続完了とみなします。")]
+    [SerializeField]
     private string serverHealthUrl = "http://127.0.0.1:8000/health";
 
-    [SerializeField, Tooltip("ヘルスチェック再試行間隔（秒）。")]
+    [SerializeField]
     private float serverHealthRetryIntervalSeconds = 2f;
 
-    [SerializeField, Tooltip("ヘルスチェックリクエストのタイムアウト秒数。")]
+    [SerializeField]
     private int serverHealthRequestTimeoutSeconds = 5;
-    #endregion
 
-    #region 内部状態
     private readonly List<GeneticBoidAgent> simulationAgents = new();
     public event System.Action<int, int> OnIndividualEvaluationStarted;
     public IReadOnlyList<GeneticBoidAgent> ActiveAgents => simulationAgents;
@@ -124,8 +76,6 @@ public class GeneticAlgorithmManager : MonoBehaviour
     private bool serverReady = false;
     private bool pendingEvaluationStart = false;
     private Coroutine serverHealthCoroutine;
-    private bool hasLoggedServerWait = false;
-
     private float bestFitness = 0f;
     private float avgFitness = 0f;
     private float[] bestGenes = new float[GeneticBoidAgent.GeneCount];
@@ -140,45 +90,28 @@ public class GeneticAlgorithmManager : MonoBehaviour
     private bool populationCsvHeaderWritten = false;
 
     private int SamplesPerIndividual => Mathf.Max(1, recordingsPerIndividual);
-    #endregion
 
-    #region ログ設定
-    [Header("ログ設定")]
-    [Tooltip("詳細ログを表示")]
-    public bool enableDetailedLogging = true;
-
-    [Tooltip("世代ごとにベスト遺伝子を表示")]
-    public bool logBestGenes = true;
-    #endregion
-
-    #region CSV 出力
-    [Header("CSV ログ設定")]
-    [SerializeField, Tooltip("世代ごとのベスト遺伝子と適応度を CSV に書き出すかどうか。")]
+    [SerializeField]
     private bool enableCsvLogging = false;
 
-    [SerializeField, Tooltip("CSV ファイル名。プロジェクトルート直下の Logs フォルダに保存されます。")]
+    [SerializeField]
     private string csvFileName = "ga_progress.csv";
 
-    [SerializeField, Tooltip("シーン開始時に既存の CSV を上書きするかどうか。無効の場合は追記します。")]
+    [SerializeField]
     private bool overwriteCsvOnStart = true;
 
-    [SerializeField, Tooltip("世代ごとに生成された全個体の遺伝子を記録する CSV ファイル名。Logs フォルダに保存されます。")]
+    [SerializeField]
     private string populationCsvFileName = "ga_population.csv";
-    #endregion
 
-    #region CSV 復元設定
-    [Header("CSV 復元設定")]
-    [SerializeField, Tooltip("既存の population CSV から最新世代を読み込み、GA を継続するかどうか。")]
+    [SerializeField]
     private bool resumeFromCsv = false;
 
-    [SerializeField, Tooltip("読み込みに使用する CSV ファイル名。空欄の場合は populationCsvFileName を利用します。")]
+    [SerializeField]
     private string resumeCsvFileName = "";
 
-    [SerializeField, Tooltip("0 で最新世代から、正の値で指定した世代番号 (1-based) から再開します。")]
+    [SerializeField]
     private int resumeGenerationNumber = 0;
-    #endregion
 
-    #region Unity ライフサイクル
     private void Awake()
     {
         if (videoRecorder == null)
@@ -191,7 +124,6 @@ public class GeneticAlgorithmManager : MonoBehaviour
     {
         if (agentPrefab == null)
         {
-            Debug.LogError("[GA] Agent prefab not assigned!");
             return;
         }
 
@@ -217,9 +149,7 @@ public class GeneticAlgorithmManager : MonoBehaviour
             serverHealthCoroutine = null;
         }
     }
-    #endregion
 
-    #region 初期化
     private void InitializeSimulationAgents()
     {
         CacheAgentPrefabBounds();
@@ -246,10 +176,6 @@ public class GeneticAlgorithmManager : MonoBehaviour
                 spawnPosition = transform.TransformPoint(fallbackLocal);
                 spawnRotation = transform.rotation * Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
 
-                if (enableDetailedLogging)
-                {
-                    Debug.LogWarning($"[GA] Failed to find collision-free spawn for agent {i}. Using fallback position.");
-                }
             }
 
             GameObject agentObj = Instantiate(agentPrefab, spawnPosition, spawnRotation, transform);
@@ -259,10 +185,6 @@ public class GeneticAlgorithmManager : MonoBehaviour
             {
                 agent.ResetFitness();
                 simulationAgents.Add(agent);
-            }
-            else
-            {
-                Debug.LogError($"[GA] Agent prefab missing GeneticBoidAgent component ({agentObj.name})");
             }
         }
     }
@@ -279,9 +201,7 @@ public class GeneticAlgorithmManager : MonoBehaviour
             });
         }
     }
-    #endregion
 
-    #region スポーン補助
     private void EnsureSimulationAgentsReady()
     {
         int desiredCount = Mathf.Max(1, agentsPerEvaluation);
@@ -492,10 +412,6 @@ public class GeneticAlgorithmManager : MonoBehaviour
                 spawnPosition = transform.TransformPoint(fallbackLocal);
                 spawnRotation = transform.rotation * Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
 
-                if (enableDetailedLogging)
-                {
-                    Debug.LogWarning($"[GA] Failed to find collision-free spawn while resetting agents. Using fallback position.");
-                }
             }
 
             agent.ResetTransform(spawnPosition, spawnRotation);
@@ -555,9 +471,7 @@ public class GeneticAlgorithmManager : MonoBehaviour
     {
         return new Vector3(Mathf.Abs(value.x), Mathf.Abs(value.y), Mathf.Abs(value.z));
     }
-    #endregion
 
-    #region 評価フロー
     public void StartEvaluation()
     {
         QueueEvaluationStart();
@@ -570,7 +484,6 @@ public class GeneticAlgorithmManager : MonoBehaviour
 
         if (!serverReady)
         {
-            LogWaitingForServer();
             return;
         }
 
@@ -585,19 +498,7 @@ public class GeneticAlgorithmManager : MonoBehaviour
         }
 
         pendingEvaluationStart = false;
-        hasLoggedServerWait = false;
         StartGenerationEvaluation();
-    }
-
-    private void LogWaitingForServer()
-    {
-        if (hasLoggedServerWait)
-        {
-            return;
-        }
-
-        hasLoggedServerWait = true;
-        LogStatus("Waiting for Python server health before starting evaluation...");
     }
 
     private void EnsureServerHealthCheckStarted()
@@ -610,7 +511,6 @@ public class GeneticAlgorithmManager : MonoBehaviour
         if (string.IsNullOrWhiteSpace(serverHealthUrl))
         {
             serverReady = true;
-            LogStatus("Server health URL not set. Skipping health check.");
             TryStartEvaluationWhenReady();
             return;
         }
@@ -624,33 +524,25 @@ public class GeneticAlgorithmManager : MonoBehaviour
         {
             pendingEvaluationStart = true;
             EnsureServerHealthCheckStarted();
-            LogWaitingForServer();
             return;
         }
 
         pendingEvaluationStart = false;
-        hasLoggedServerWait = false;
 
         EnsureSimulationAgentsReady();
 
         if (simulationAgents.Count == 0 || individuals.Count == 0)
         {
-            Debug.LogWarning("[GA] Cannot start evaluation: agents or individuals missing.");
             return;
         }
 
         if (generationInProgress)
         {
-            if (enableDetailedLogging)
-            {
-                Debug.LogWarning("[GA] Evaluation already in progress.");
-            }
             return;
         }
 
         generationInProgress = true;
         currentIndividualIndex = 0;
-        LogStatus($"Starting generation {currentGeneration}, evaluating {individuals.Count} individuals.");
         PrepareIndividualEvaluation(currentIndividualIndex);
     }
 
@@ -679,22 +571,7 @@ public class GeneticAlgorithmManager : MonoBehaviour
                 if (IsUnityWebRequestSuccessful(request))
                 {
                     serverReady = true;
-                    LogStatus($"Server health check succeeded ({serverHealthUrl}).");
                     break;
-                }
-
-                string errorDetails = string.IsNullOrEmpty(request.error) ? "Unknown error" : request.error;
-                long responseCode = request.responseCode;
-                string responseLabel = responseCode > 0 ? responseCode.ToString() : "no response";
-                string retryMessage = $"[GA] Server health check failed ({responseLabel}): {errorDetails}. Retrying in {retryInterval:F1}s.";
-
-                if (hasLoggedServerWait)
-                {
-                    Debug.LogWarning(retryMessage);
-                }
-                else if (enableDetailedLogging)
-                {
-                    Debug.Log(retryMessage);
                 }
             }
         }
@@ -717,7 +594,6 @@ public class GeneticAlgorithmManager : MonoBehaviour
     {
         if (index < 0 || index >= individuals.Count)
         {
-            Debug.LogError($"[GA] Invalid individual index {index}");
             generationInProgress = false;
             waitingForServerScore = false;
             return;
@@ -733,7 +609,6 @@ public class GeneticAlgorithmManager : MonoBehaviour
 
         if (!TryStartSampleEvaluation())
         {
-            Debug.LogWarning("[GA] VideoRecorder not found. Using local fitness estimate.");
             HandleSampleStartFailure("VideoRecorder unavailable");
         }
     }
@@ -783,13 +658,6 @@ public class GeneticAlgorithmManager : MonoBehaviour
         waitingForServerScore = true;
         BeginServerScoreTimeoutWatch(currentIndividualIndex);
 
-        LogStatus($"Individual {currentIndividualIndex + 1}/{individuals.Count}: recording sample {sampleNumber}/{totalSamples}.");
-
-        if (enableDetailedLogging)
-        {
-            Debug.Log($"[GA] Generation {currentGeneration}, Individual {currentIndividualIndex + 1}: sample {sampleNumber}/{totalSamples} underway.");
-        }
-
         return true;
     }
 
@@ -802,12 +670,10 @@ public class GeneticAlgorithmManager : MonoBehaviour
         if (samplesCompletedForCurrentIndividual > 0)
         {
             resolvedFitness = bestScoreForCurrentIndividual;
-            LogStatus($"Individual {currentIndividualIndex + 1} kept best score {resolvedFitness:F3} from {samplesCompletedForCurrentIndividual} sample(s) before stop ({reason}).");
         }
         else
         {
             resolvedFitness = CalculateFallbackFitness();
-            LogStatus($"Individual {currentIndividualIndex + 1} fallback fitness {resolvedFitness:F3} applied ({reason}).");
         }
 
         if (currentIndividualIndex >= 0 && currentIndividualIndex < individuals.Count)
@@ -832,7 +698,6 @@ public class GeneticAlgorithmManager : MonoBehaviour
 
         if (currentIndividualIndex < 0 || currentIndividualIndex >= individuals.Count)
         {
-            Debug.LogWarning("[GA] Received score but individual index is out of range.");
             return;
         }
 
@@ -840,13 +705,6 @@ public class GeneticAlgorithmManager : MonoBehaviour
         CancelServerScoreTimeoutWatch();
 
         float clampedScore = Mathf.Max(0f, score);
-        LogStatus($"Received server score {clampedScore:F3} for individual {currentIndividualIndex + 1}.");
-
-        if (enableDetailedLogging)
-        {
-            Debug.Log($"[GA] Generation {currentGeneration}, Individual {currentIndividualIndex + 1}: server score = {clampedScore:F4}");
-        }
-
         CompleteSampleEvaluation(clampedScore);
     }
 
@@ -854,7 +712,6 @@ public class GeneticAlgorithmManager : MonoBehaviour
     {
         if (currentIndividualIndex < 0 || currentIndividualIndex >= individuals.Count)
         {
-            Debug.LogWarning("[GA] Cannot complete sample: individual index out of range.");
             return;
         }
 
@@ -863,8 +720,6 @@ public class GeneticAlgorithmManager : MonoBehaviour
         samplesCompletedForCurrentIndividual++;
 
         int totalSamples = SamplesPerIndividual;
-        LogStatus($"Sample {samplesCompletedForCurrentIndividual}/{totalSamples} for individual {currentIndividualIndex + 1} scored {sampleScore:F3}.");
-
         if (samplesCompletedForCurrentIndividual < totalSamples)
         {
             if (!TryStartSampleEvaluation())
@@ -876,8 +731,6 @@ public class GeneticAlgorithmManager : MonoBehaviour
 
         float resolvedScore = bestScoreForCurrentIndividual;
         individuals[currentIndividualIndex].Fitness = resolvedScore;
-        LogStatus($"Individual {currentIndividualIndex + 1} best score {resolvedScore:F3} across {totalSamples} samples.");
-
         AdvanceToNextIndividual();
     }
 
@@ -905,23 +758,8 @@ public class GeneticAlgorithmManager : MonoBehaviour
         WriteGenerationCsvRow();
     WritePopulationParametersToCsv(currentGeneration, individuals);
 
-        if (enableDetailedLogging)
-        {
-            Debug.Log($"[GA] Generation {currentGeneration}: Best Fitness = {bestFitness:F4}, Avg Fitness = {avgFitness:F4}");
-        }
-        else
-        {
-            LogStatus($"Generation {currentGeneration} complete. Best {bestFitness:F3}, Avg {avgFitness:F3}.");
-        }
-
-        if (logBestGenes)
-        {
-            Debug.Log("[GA] Best Genes: " + string.Join(", ", bestGenes.Select((g, i) => $"{GeneticBoidAgent.GeneNames[i]}={g:F2}")));
-        }
-
         if (maxGenerations > 0 && currentGeneration + 1 >= maxGenerations)
         {
-            Debug.Log($"[GA] Reached max generations ({maxGenerations}). Evolution complete.");
             return;
         }
 
@@ -935,22 +773,11 @@ public class GeneticAlgorithmManager : MonoBehaviour
             QueueEvaluationStart();
         }
     }
-    #endregion
 
-    #region 選択・交叉・突然変異
     private List<Individual> CreateNextGeneration()
     {
         var ordered = individuals.OrderByDescending(ind => ind.Fitness).ToList();
         var newPopulation = new List<Individual>();
-
-        for (int i = 0; i < eliteCount && i < ordered.Count; i++)
-        {
-            newPopulation.Add(new Individual
-            {
-                Genes = CloneGenes(ordered[i].Genes),
-                Fitness = 0f
-            });
-        }
 
         while (newPopulation.Count < populationSize)
         {
@@ -1061,9 +888,7 @@ public class GeneticAlgorithmManager : MonoBehaviour
         float u2 = Random.value;
         return Mathf.Sqrt(-2f * Mathf.Log(u1)) * Mathf.Sin(2f * Mathf.PI * u2);
     }
-    #endregion
 
-    #region 統計
     private void CalculateStatistics()
     {
         if (individuals.Count == 0)
@@ -1079,9 +904,7 @@ public class GeneticAlgorithmManager : MonoBehaviour
         avgFitness = individuals.Average(ind => ind.Fitness);
         bestGenes = CloneGenes(ordered[0].Genes);
     }
-    #endregion
 
-    #region CSV 復元
     private bool TryLoadPopulationFromCsv()
     {
         if (!resumeFromCsv)
@@ -1092,7 +915,6 @@ public class GeneticAlgorithmManager : MonoBehaviour
         string fileName = string.IsNullOrWhiteSpace(resumeCsvFileName) ? populationCsvFileName : resumeCsvFileName.Trim();
         if (string.IsNullOrWhiteSpace(fileName))
         {
-            Debug.LogWarning("[GA] Resume requested but CSV file name is empty.");
             return false;
         }
 
@@ -1101,7 +923,6 @@ public class GeneticAlgorithmManager : MonoBehaviour
 
         if (!File.Exists(fullPath))
         {
-            Debug.LogWarning($"[GA] Resume requested but CSV file not found: {fullPath}");
             return false;
         }
 
@@ -1176,7 +997,6 @@ public class GeneticAlgorithmManager : MonoBehaviour
 
             if (generationRows.Count == 0)
             {
-                Debug.LogWarning($"[GA] Resume requested but CSV '{fileName}' contains no population rows.");
                 return false;
             }
 
@@ -1184,17 +1004,12 @@ public class GeneticAlgorithmManager : MonoBehaviour
             int targetGeneration = resumeGenerationNumber > 0 ? resumeGenerationNumber : latestGeneration;
             if (!generationRows.TryGetValue(targetGeneration, out var targetRows))
             {
-                Debug.LogWarning($"[GA] Requested generation {resumeGenerationNumber} not found in CSV. Falling back to latest generation {latestGeneration}.");
                 targetGeneration = latestGeneration;
                 targetRows = generationRows[targetGeneration];
             }
 
             var orderedRows = targetRows.OrderBy(tuple => tuple.index).ToList();
 
-            if (orderedRows.Count < populationSize)
-            {
-                Debug.LogWarning($"[GA] CSV generation {targetGeneration} contains {orderedRows.Count} individuals, but populationSize is {populationSize}. Missing entries will be randomized.");
-            }
 
             var restoredPopulation = new List<Individual>(populationSize);
             for (int i = 0; i < populationSize; i++)
@@ -1229,22 +1044,16 @@ public class GeneticAlgorithmManager : MonoBehaviour
 
             if (overwriteCsvOnStart)
             {
-                Debug.LogWarning("[GA] CSV resume enabled. Existing CSV logs will be appended instead of overwritten to preserve history.");
                 overwriteCsvOnStart = false;
             }
-
-            LogStatus($"Population restored from CSV '{fileName}' (generation {targetGeneration}). Starting evaluation from generation {currentGeneration + 1}.");
             return true;
         }
-        catch (System.Exception ex)
+        catch (System.Exception)
         {
-            Debug.LogError($"[GA] Failed to resume population from CSV: {ex.Message}");
             return false;
         }
     }
-    #endregion
 
-    #region CSV ログ出力
     private void InitializeCsvLogging()
     {
         csvHeaderWritten = false;
@@ -1265,9 +1074,8 @@ public class GeneticAlgorithmManager : MonoBehaviour
         {
             Directory.CreateDirectory(logsDirectory);
         }
-        catch (System.Exception ex)
+        catch (System.Exception)
         {
-            Debug.LogError($"[GA] Failed to create Logs directory: {ex.Message}");
             enableCsvLogging = false;
             csvFilePath = null;
             return;
@@ -1319,9 +1127,8 @@ public class GeneticAlgorithmManager : MonoBehaviour
             {
                 shouldOverwrite = new FileInfo(filePath).Length == 0;
             }
-            catch (System.Exception ex)
+            catch (System.Exception)
             {
-                Debug.LogWarning($"[GA] Unable to inspect CSV file '{fileName}'. Will append without rewriting header. {ex.Message}");
             }
         }
 
@@ -1332,11 +1139,9 @@ public class GeneticAlgorithmManager : MonoBehaviour
                 using StreamWriter writer = new StreamWriter(filePath, false, Encoding.UTF8);
                 writer.WriteLine(header);
                 headerWritten = true;
-                LogStatus($"CSV logging initialized: {filePath}");
             }
-            catch (System.Exception ex)
+            catch (System.Exception)
             {
-                Debug.LogError($"[GA] Failed to initialize CSV logging for '{fileName}': {ex.Message}");
                 filePath = null;
                 headerWritten = false;
             }
@@ -1344,7 +1149,6 @@ public class GeneticAlgorithmManager : MonoBehaviour
         else
         {
             headerWritten = true;
-            LogStatus($"CSV logging appending to existing file: {filePath}");
         }
     }
 
@@ -1381,9 +1185,8 @@ public class GeneticAlgorithmManager : MonoBehaviour
             sb.AppendLine();
             File.AppendAllText(csvFilePath, sb.ToString(), Encoding.UTF8);
         }
-        catch (System.Exception ex)
+        catch (System.Exception)
         {
-            Debug.LogError($"[GA] Failed to write CSV row: {ex.Message}");
         }
     }
 
@@ -1432,21 +1235,17 @@ public class GeneticAlgorithmManager : MonoBehaviour
                 writer.WriteLine(sb.ToString());
             }
         }
-        catch (System.Exception ex)
+        catch (System.Exception)
         {
-            Debug.LogError($"[GA] Failed to write population CSV rows: {ex.Message}");
         }
     }
-    #endregion
 
-    #region 手動制御 API
     public void StopEvaluation()
     {
         generationInProgress = false;
         waitingForServerScore = false;
         CancelServerScoreTimeoutWatch();
         pendingEvaluationStart = false;
-        hasLoggedServerWait = false;
         autoRun = false;
     }
 
@@ -1457,7 +1256,6 @@ public class GeneticAlgorithmManager : MonoBehaviour
         waitingForServerScore = false;
         CancelServerScoreTimeoutWatch();
         pendingEvaluationStart = false;
-        hasLoggedServerWait = false;
         samplesCompletedForCurrentIndividual = 0;
         bestScoreForCurrentIndividual = 0f;
         InitializePopulationGenes();
@@ -1516,11 +1314,7 @@ public class GeneticAlgorithmManager : MonoBehaviour
         CancelServerScoreTimeoutWatch();
 
         float fallbackFitness = CalculateFallbackFitness();
-        Debug.LogWarning($"[GA] Timed out waiting for server score after {serverScoreTimeoutSeconds:F1}s at individual {currentIndividualIndex + 1}. Applying fallback sample score {fallbackFitness:F3}.");
-        LogStatus($"Timeout fallback score {fallbackFitness:F3} used for individual {currentIndividualIndex + 1}.");
-
         CompleteSampleEvaluation(fallbackFitness);
     }
-    #endregion
 
 }

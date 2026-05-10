@@ -4619,7 +4619,7 @@ MonoBehaviour:
   maxGenerations: 50
   autoRun: 1
   recordingsPerIndividual: 5
-  agentPrefab: {fileID: 627803851687001208, guid: 7e83763f25bb9f74e8b81b20fa2c007b,
+  agentPrefab: {fileID: 627803851687001208, guid: 4bae46c54ae2ede47a36dd3d1339a7bf,
     type: 3}
   spawnRange: 14
   spawnHeight: 14

@@ -15,9 +15,9 @@ RenderSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 9
   m_Fog: 1
-  m_FogColor: {r: 0.17590779, g: 0.39215687, b: 0.54901963, a: 1}
+  m_FogColor: {r: 0.1764706, g: 0.39215687, b: 0.54901963, a: 1}
   m_FogMode: 2
-  m_FogDensity: 0
+  m_FogDensity: 0.4
   m_LinearFogStart: 0
   m_LinearFogEnd: 300
   m_AmbientSkyColor: {r: 0.212, g: 0.227, b: 0.259, a: 1}
@@ -1947,6 +1947,7 @@ GameObject:
   - component: {fileID: 870610537}
   - component: {fileID: 870610538}
   - component: {fileID: 870610539}
+  - component: {fileID: 870610540}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -2062,20 +2063,25 @@ MonoBehaviour:
   m_GameObject: {fileID: 870610533}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4c8a3dfcf021adb42847be635778c271, type: 3}
+  m_Script: {fileID: 11500000, guid: 227104f87bcba46d2aea25686242c304, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  moveDurationSeconds: 0
-  maxDistanceToFocus: 7
+  autoFindBoids: 1
+  targetCamera: {fileID: 870610535}
+  followDistance: 14
+  positionSmoothTime: 0
+  orbitDegreesPerSecond: 15
+  lookLerpSpeed: 6
+  movementIntervalSeconds: 5
+  movementDurationSeconds: 0
+  continuousTracking: 0
+  objectGenerator: {fileID: 1554092671}
+  maxDistanceToFocus: 8
   lookDownAngleDegrees: 20
+  autoStartRecordingOnPlay: 1
+  loopRecording: 1
   videoRecorder: {fileID: 870610539}
-  geneticAlgorithmManager: {fileID: 2044161435}
   recordingTailSeconds: 0.5
-  serverScoreTimeoutSeconds: 1800
-  prioritizeAgentCenter: 1
-  preMoveDelaySeconds: 3
-  enforcedRecordingDurationSeconds: 5
-  enforcedRecordingFrameRate: 15
 --- !u!114 &870610539
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2096,19 +2102,35 @@ MonoBehaviour:
   recordingHeight: 1080
   autoEncodeToMp4: 1
   ffmpegExePath: ffmpeg
-  deleteFramesAfterEncode: 1
-  overwriteExistingRecordings: 0
+  deleteFramesAfterEncode: 0
+  overwriteExistingRecordings: 1
   lockCaptureFramerate: 1
-  archiveUploadedVideos: 0
+  archiveUploadedVideos: 1
   uploadArchiveSubdirectory: Uploaded
   consolidateVideosIntoSingleFolder: 1
   consolidatedVideoSubfolder: Videos
   serverBaseUrl: http://localhost:8000
-  serverTimeout: 1800
+  serverTimeout: 180
   maxRetryAttempts: 5
   retryDelay: 2
-  enableDetailedLogging: 1
-  uploadToServer: 1
+  enableDetailedLogging: 0
+  uploadToServer: 0
+--- !u!114 &870610540
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 870610533}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e2e7f82de73eeef4fb90ecdd1824aae5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  r: 0.15
+  g: 0.4
+  b: 0.55
+  density: 0.5
 --- !u!1001 &899462439
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -2910,7 +2932,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 36508c771463abf43b7135d9539897e7, type: 2}
+  - {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -3355,6 +3377,74 @@ MeshCollider:
   m_Convex: 0
   m_CookingOptions: 30
   m_Mesh: {fileID: 10209, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &1554092670
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1554092672}
+  - component: {fileID: 1554092671}
+  - component: {fileID: 1554092673}
+  m_Layer: 0
+  m_Name: tuna-boids
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1554092671
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1554092670}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b8c5036318c454bb5b066a8de06ca20d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  objectToSpawn: {fileID: 4105506564861623119, guid: 6c937dc3187de6d4485e5a1d2ea9712a,
+    type: 3}
+  numberOfObjects: 100
+  spawnRadius: 14
+  spawnHeight: 14
+  maxAttempts: 100
+  debugMode: 0
+--- !u!4 &1554092672
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1554092670}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 50, y: 40.5, z: 50}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_RootOrder: 4
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!58 &1554092673
+CircleCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1554092670}
+  m_Enabled: 0
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IsTrigger: 0
+  m_UsedByEffector: 0
+  m_UsedByComposite: 0
+  m_Offset: {x: 0, y: 0}
+  serializedVersion: 2
+  m_Radius: 14
 --- !u!43 &1604052608
 Mesh:
   m_ObjectHideFlags: 0
@@ -4583,83 +4673,6 @@ Mesh:
     offset: 0
     size: 0
     path: 
---- !u!1 &2044161434
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 2044161436}
-  - component: {fileID: 2044161435}
-  m_Layer: 0
-  m_Name: ga-manager
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &2044161435
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2044161434}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c0f15003eaafbb4448bd7829bba2561b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  populationSize: 50
-  mutationRate: 0.01
-  mutationStrength: 0.05
-  crossoverRate: 0.8
-  maxGenerations: 50
-  autoRun: 1
-  recordingsPerIndividual: 5
-  agentPrefab: {fileID: 627803851687001208, guid: 7e83763f25bb9f74e8b81b20fa2c007b,
-    type: 3}
-  spawnRange: 14
-  spawnHeight: 14
-  agentsPerEvaluation: 50
-  spawnMaxAttempts: 100
-  spawnCollisionMask:
-    serializedVersion: 2
-    m_Bits: 4294967291
-  spawnFallbackRadius: 1.5
-  fogDensity: 0.5
-  r: 0.15
-  g: 0.4
-  b: 0.55
-  videoRecorder: {fileID: 870610539}
-  serverScoreTimeoutSeconds: 1800
-  serverHealthUrl: http://127.0.0.1:8000/health
-  serverHealthRetryIntervalSeconds: 2
-  serverHealthRequestTimeoutSeconds: 5
-  enableCsvLogging: 1
-  csvFileName: ga_progress.csv
-  overwriteCsvOnStart: 1
-  populationCsvFileName: ga_population.csv
-  resumeFromCsv: 1
-  resumeCsvFileName: ga_population.csv
-  resumeGenerationNumber: 0
---- !u!4 &2044161436
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2044161434}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 50, y: 40.5, z: 50}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_RootOrder: 4
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!43 &2050488095
 Mesh:
   m_ObjectHideFlags: 0
@@ -5224,11 +5237,6 @@ PrefabInstance:
         type: 3}
       propertyPath: m_Name
       value: water
-      objectReference: {fileID: 0}
-    - target: {fileID: 1684528501663589431, guid: 040976717ccb64afaa04c958f84319c7,
-        type: 3}
-      propertyPath: m_IsActive
-      value: 1
       objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 040976717ccb64afaa04c958f84319c7, type: 3}

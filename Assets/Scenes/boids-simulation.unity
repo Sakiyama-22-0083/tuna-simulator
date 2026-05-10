@@ -2130,7 +2130,7 @@ MonoBehaviour:
   r: 0.15
   g: 0.4
   b: 0.55
-  density: 0.01
+  density: 0.5
 --- !u!1001 &899462439
 PrefabInstance:
   m_ObjectHideFlags: 0
